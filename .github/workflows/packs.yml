@@ -1,0 +1,82 @@
+name: Build Addon
+on:
+  workflow_dispatch:
+    inputs:
+      pack_id:
+        description: ID пакета дополнения
+        type: string
+        default: io.github.abdurazaaqmohammed.packs.text
+      build_type:
+        description: Тип сборки
+        type: choice
+        default: release
+        options:
+          - release
+          - debug
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+      - name: Find module
+        run: |
+          set -e
+          F=$(grep -rl --include=build.gradle "${{ inputs.pack_id }}" . | head -1)
+          if [ -z "$F" ]; then echo "Module not found for ${{ inputs.pack_id }}"; exit 1; fi
+          DIR=$(dirname "$F")
+          MOD=":$(echo "${DIR#./}" | tr '/' ':')"
+          echo "DIR=$DIR" >> "$GITHUB_ENV"
+          echo "MOD=$MOD" >> "$GITHUB_ENV"
+          echo "Module: $MOD in $DIR"
+      - name: Prepare my key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/my.keystore"
+          mkdir -p ~/.android
+          rm -f ~/.android/debug.keystore
+          keytool -importkeystore -noprompt \
+            -srckeystore "$RUNNER_TEMP/my.keystore" -srcstorepass "$KS_PASS" \
+            -srcalias "$KEY_ALIAS" -srckeypass "$KEY_PASS" \
+            -destkeystore ~/.android/debug.keystore -deststoretype JKS \
+            -deststorepass android -destalias androiddebugkey -destkeypass android
+      - run: chmod +x gradlew
+      - name: Build
+        run: ./gradlew ${MOD}:assemble${{ inputs.build_type == 'debug' && 'Debug' || 'Release' }}
+      - name: Sign release
+        if: inputs.build_type == 'release'
+        env:
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          BT=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
+          OUT="$DIR/build/outputs/apk/release"
+          IN=$(ls "$OUT"/*.apk | head -1)
+          $ANDROID_HOME/build-tools/$BT/zipalign -p -f 4 "$IN" "$RUNNER_TEMP/aligned.apk"
+          $ANDROID_HOME/build-tools/$BT/apksigner sign \
+            --ks "$RUNNER_TEMP/my.keystore" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KS_PASS --key-pass env:KEY_PASS \
+            --out "$OUT/addon-signed.apk" "$RUNNER_TEMP/aligned.apk"
+          rm -f "$IN"
+      - name: List APKs
+        run: find "$DIR/build/outputs" -name '*.apk'
+      - uses: actions/upload-artifact@v5
+        with:
+          name: MPManager-addon-${{ inputs.build_type }}
+          path: ${{ env.DIR }}/build/outputs/apk/${{ inputs.build_type }}/*.apk
+          if-no-files-found: error
+          retention-days: 14
