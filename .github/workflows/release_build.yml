@@ -1,0 +1,55 @@
+name: Build Release
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: Release
+        type: choice
+        default: full
+        options:
+          - full
+          - lite
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Install Android SDK, NDK, CMake
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37" "ndk;29.0.14206865" "cmake;3.22.1" || true
+      - name: Prepare release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/my.keystore"
+          GRADLE_FILE=$(grep -rl --include=build.gradle 'io.github.abdurazaaqmohammed.MPManager' . | head -1)
+          APP_DIR=$(dirname "$GRADLE_FILE")
+          echo "App module: $APP_DIR"
+          rm -f "$APP_DIR/release.keystore"
+          keytool -importkeystore -noprompt \
+            -srckeystore "$RUNNER_TEMP/my.keystore" -srcstorepass "$KS_PASS" \
+            -srcalias "$KEY_ALIAS" -srckeypass "$KEY_PASS" \
+            -destkeystore "$APP_DIR/release.keystore" -deststoretype JKS \
+            -deststorepass 000000 -destalias mido -destkeypass 000000
+      - run: chmod +x gradlew
+      - run: ./gradlew assemble${{ inputs.flavor == 'lite' && 'Lite' || 'Full' }}Release
+      - name: List APKs
+        run: find . -path '*/build/outputs/apk/*' -name '*.apk'
+      - uses: actions/upload-artifact@v5
+        with:
+          name: MPManager-release
+          path: '**/build/outputs/apk/**/*.apk'
+          if-no-files-found: error
+          retention-days: 14
