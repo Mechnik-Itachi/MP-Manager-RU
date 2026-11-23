@@ -1627,6 +1627,7 @@ public abstract class DexWriter<
             }
         }
 
+
         if (lastNamedParameterIndex == -1 && (debugItems == null || Iterables.isEmpty(debugItems))) {
             return NO_OFFSET;
         }
@@ -1634,6 +1635,7 @@ public abstract class DexWriter<
         tempBuf.reset();
 
         int startingLineNumber = 0;
+
         if (debugItems != null) {
             for (DebugItem debugItem: debugItems) {
                 if (debugItem instanceof LineNumber) {
