@@ -1,0 +1,50 @@
+name: Build Theme Sample
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+      - name: Find module
+        run: |
+          set -e
+          F=$(grep -rl --include=build.gradle "com.example.mpthemesample" . | head -1)
+          if [ -z "$F" ]; then echo "Module not found"; exit 1; fi
+          DIR=$(dirname "$F")
+          MOD=":$(echo "${DIR#./}" | tr '/' ':')"
+          echo "DIR=$DIR" >> "$GITHUB_ENV"
+          echo "MOD=$MOD" >> "$GITHUB_ENV"
+          echo "Module: $MOD in $DIR"
+      - run: chmod +x gradlew
+      - run: ./gradlew ${MOD}:assembleRelease
+      - name: Sign release
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          BT=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
+          IN=$(find "$DIR/build/outputs/apk/release" -name '*.apk' | head -1)
+          $ANDROID_HOME/build-tools/$BT/zipalign -p -f 4 "$IN" "$RUNNER_TEMP/aligned.apk"
+          $ANDROID_HOME/build-tools/$BT/apksigner sign \
+            --ks "$RUNNER_TEMP/release.keystore" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KS_PASS --key-pass env:KEY_PASS \
+            --out "$RUNNER_TEMP/theme-sample-signed.apk" "$RUNNER_TEMP/aligned.apk"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: MPManager-theme-sample
+          path: ${{ runner.temp }}/theme-sample-signed.apk
+          if-no-files-found: error
+          retention-days: 14
