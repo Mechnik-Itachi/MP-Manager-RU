@@ -1,0 +1,95 @@
+name: Build Release (Choose Architecture)
+on:
+  workflow_dispatch:
+    inputs:
+      flavor:
+        description: Вариант сборки
+        type: choice
+        default: full
+        options:
+          - full
+          - lite
+      abi:
+        description: Архитектура
+        type: choice
+        default: arm64-v8a
+        options:
+          - arm64-v8a
+          - armeabi-v7a
+          - x86
+          - x86_64
+          - universal
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Install Android SDK, NDK, CMake
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37" "ndk;29.0.14206865" "cmake;3.22.1" || true
+      - run: chmod +x gradlew
+      - name: Prepare release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/my.keystore"
+          GRADLE_FILE=$(grep -rl --include=build.gradle 'io.github.abdurazaaqmohammed.MPManager' . | head -1)
+          APP_DIR=$(dirname "$GRADLE_FILE")
+          echo "APP_DIR=$APP_DIR" >> "$GITHUB_ENV"
+          rm -f "$APP_DIR/release.keystore"
+          keytool -importkeystore -noprompt \
+            -srckeystore "$RUNNER_TEMP/my.keystore" -srcstorepass "$KS_PASS" \
+            -srcalias "$KEY_ALIAS" -srckeypass "$KEY_PASS" \
+            -destkeystore "$APP_DIR/release.keystore" -deststoretype JKS \
+            -deststorepass 000000 -destalias mido -destkeypass 000000
+      - name: Build
+        run: |
+          set -e
+          FLAVOR="${{ inputs.flavor == 'lite' && 'Lite' || 'Full' }}"
+          if [ "${{ inputs.abi }}" = "universal" ]; then
+            ./gradlew "assemble${FLAVOR}Release"
+          else
+            ./gradlew "assemble${FLAVOR}Release" -Pandroid.injected.build.abi=${{ inputs.abi }}
+          fi
+      - name: Find matching APK
+        id: find
+        run: |
+          set -e
+          if [ "${{ inputs.abi }}" = "universal" ]; then
+            APK=$(find . -path '*/build/outputs/apk/*' -iname '*universal*.apk' | head -1)
+            [ -z "$APK" ] && APK=$(find . -path '*/build/outputs/apk/*' -name '*.apk' | head -1)
+          else
+            APK=$(find . -path '*/build/outputs/apk/*' -iname "*${{ inputs.abi }}*.apk" | head -1)
+          fi
+          [ -z "$APK" ] && { echo "APK not found"; find . -path '*/build/outputs/apk/*' -name '*.apk'; exit 1; }
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: MPManager-${{ inputs.flavor }}-${{ inputs.abi }}
+          path: ${{ steps.find.outputs.apk }}
+          retention-days: 14
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="MP-${{ inputs.flavor }}-${{ inputs.abi }}-$(date +%Y%m%d%H%M)"
+          gh release create "$TAG" "${{ steps.find.outputs.apk }}" \
+            --title "MP Manager (${{ inputs.flavor }}, ${{ inputs.abi }})" \
+            --notes "Сборка подписана личным ключом."
