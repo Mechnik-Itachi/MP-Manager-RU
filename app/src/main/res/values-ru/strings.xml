@@ -28,7 +28,7 @@
     <string name="system_theme">Системная тема</string>
     <string name="func">Функциональность</string>
     <string name="pkg_name_save">Сохранять файлы с именем пакета вместо имени приложения</string>
-    <string name="split">Split</string>
+    <string name="split">Разделение</string>
     <string name="adding">Добавление %1$s</string>
     <string name="adding_to">Добавление %1$s в %2$s</string>
     <string name="extracting">Извлечение %1$s</string>
@@ -106,7 +106,7 @@
     <string name="about_open_source_projects">Используемые открытые проекты</string>
     <string name="about_tap_for_license">Нажмите на проект, чтобы просмотреть его лицензию и ссылку на исходный код</string>
     <string name="go_to">Перейти</string>
-    <string name="arsc_copy_id">ID</string>
+    <string name="arsc_copy_id">Идентификатор</string>
     <string name="arsc_goto_id">Перейти к ID</string>
     <string name="translate">Перевести</string>
     <string name="long_select">Долгое выделение</string>
@@ -283,7 +283,7 @@
     <string name="newName">→ %1$s</string>
     <string name="set_uid">Установить UID</string>
     <string name="set_gid">Установить GID</string>
-    <string name="sticky">Sticky</string>
+    <string name="sticky">Закреплённое</string>
     <string name="owner">Владелец</string>
     <string name="group">Группа</string>
     <string name="other">Остальные</string>
@@ -564,7 +564,7 @@
     <string name="text_to_find">Текст для поиска</string>
     <string name="search_type">Тип поиска</string>
     <string name="exactly_match">Точное совпадение</string>
-    <string name="hex">Hex</string>
+    <string name="hex">Шестнадцатеричный</string>
     <string name="open_player_as_act">Открывать плеер как activity</string>
     <string name="root_install">Установка с root</string>
     <string name="root_file_operations">Файловые операции с root</string>
@@ -1476,8 +1476,8 @@
     <string name="open_apk_dir">Открыть папку APK</string>
     <string name="open_data_dir">Открыть папку данных</string>
     <string name="open_ext_data_dir">Открыть папку внешних данных</string>
-    <string name="base_label">Base</string>
-    <string name="splits_label">Splits</string>
+    <string name="base_label">Основной</string>
+    <string name="splits_label">Разделённые APK</string>
     <string name="total_label">Всего</string>
     <string name="uninstall_batch_normal">Системный деинсталлятор откроется для каждого из этих %1$d приложений, по одному:</string>
     <string name="uninstall_batch_elevated">Тихо удалить эти %1$d приложений? Это нельзя отменить:</string>
@@ -1786,8 +1786,8 @@
     <string name="il2cpp_target_hint">Дампер запускается при инициализации выбранного здесь класса. Класс Application — самый надёжный выбор; выберите другую activity, если игра загружает IL2CPP позже.</string>
     <string name="il2cpp_target_application">Класс Application — %1$s</string>
     <string name="il2cpp_target_launcher">Запускающая activity — %1$s</string>
-    <string name="il2cpp_target_unity">Unity activity — %1$s</string>
-    <string name="il2cpp_target_activity">Activity — %1$s</string>
+    <string name="il2cpp_target_unity">Активность Unity — %1$s</string>
+    <string name="il2cpp_target_activity">Активность — %1$s</string>
     <string name="il2cpp_pick_target">Сначала выберите точку внедрения</string>
     <string name="il2cpp_provider_label">Открывать дамп через DocumentsProvider</string>
     <string name="il2cpp_provider_hint">Добавляет провайдер в пропатченное приложение, чтобы его папки с данными можно было просматривать без root (та же идея, что и у опции LSPatch). Добавьте его один раз в Инструменты → Провайдеры документов, после чего он откроется в панели как папка.</string>
@@ -1801,9 +1801,9 @@
     <string name="libpatcher_desc">Порт LibPatcher (TDOhex): патчит выбранный .so заглушками инструкций так, что функция возвращает фиксированное значение — boolean true/false, integer ноль/макс, long ноль/-1, float/double ноль или void (NOP). Выберите библиотеку, введите смещения в hex (напр. из Ghidra, IDA или r2) и патчите. Поддерживаются только armeabi-v7a и arm64-v8a.</string>
     <string name="libpatcher_lib">Нативная библиотека</string>
     <string name="libpatcher_offsets_hint">Смещения — это hex-адреса вида 0x10150; разделяйте несколько смещений запятыми. Оставьте поле пустым, чтобы пропустить.</string>
-    <string name="libpatcher_type_boolean_true">Boolean → true</string>
-    <string name="libpatcher_type_boolean_false">Boolean → false</string>
-    <string name="libpatcher_type_integer_zero">Integer → 0</string>
+    <string name="libpatcher_type_boolean_true">Логическое значение → true</string>
+    <string name="libpatcher_type_boolean_false">Логическое значение → false</string>
+    <string name="libpatcher_type_integer_zero">Целое число → 0</string>
     <string name="libpatcher_type_integer16_max">Int16 → макс</string>
     <string name="libpatcher_type_integer32_max">Int32 → макс</string>
     <string name="libpatcher_type_long_zero">Long → 0</string>
@@ -1888,13 +1888,13 @@
     <string name="logcat_stream_ended">Поток журнала завершён</string>
     <string name="logcat_search_hint">Текст фильтра</string>
     <string name="logcat_level_all">Все уровни</string>
-    <string name="logcat_level_verbose">Verbose (V)</string>
-    <string name="logcat_level_debug">Debug (D)</string>
-    <string name="logcat_level_info">Info (I)</string>
-    <string name="logcat_level_warning">Warning (W)</string>
-    <string name="logcat_level_error">Error (E)</string>
-    <string name="logcat_level_fatal">Fatal (F)</string>
-    <string name="logcat_level_silent">Silent (S)</string>
+    <string name="logcat_level_verbose">Подробный (V)</string>
+    <string name="logcat_level_debug">Отладка (D)</string>
+    <string name="logcat_level_info">Информация (I)</string>
+    <string name="logcat_level_warning">Предупреждение (W)</string>
+    <string name="logcat_level_error">Ошибка (E)</string>
+    <string name="logcat_level_fatal">Критический (F)</string>
+    <string name="logcat_level_silent">Без вывода (S)</string>
     <string name="logcat_pause">Пауза</string>
     <string name="logcat_resume">Продолжить</string>
     <string name="logcat_clear">Очистить</string>
@@ -2003,7 +2003,7 @@
     <string name="hex_length">Длина</string>
     <string name="hex_end_offset">Конец (адрес)</string>
     <string name="hex_use_start_plus_length">Использовать начальный адрес + длину</string>
-    <string name="hex_hexadecimal">Hex</string>
+    <string name="hex_hexadecimal">Шестнадцатеричный</string>
     <string name="hex_invalid_range">Недопустимый диапазон</string>
     <string name="hex_copied_n">Скопировано байт: %1$d</string>
     <string name="hex_copy_as">Копировать как</string>
@@ -2129,8 +2129,8 @@
     <string name="frida_target_detecting">Определение…</string>
     <string name="frida_target_hint">Класс Application обязателен — хуки движка разрешаются через classloader приложения, который существует только после его инициализации.</string>
     <string name="frida_target_none">Не найден класс Application или activity</string>
-    <string name="frida_target_application">Application</string>
-    <string name="frida_target_launcher">launcher</string>
+    <string name="frida_target_application">Приложение</string>
+    <string name="frida_target_launcher">Запускатель</string>
     <string name="frida_abis_label">Архитектуры</string>
     <string name="frida_abis_required">Выберите хотя бы одну архитектуру</string>
     <string name="frida_no_abi">В этом APK нет папок нативных библиотек (lib/&lt;abi&gt;) для добавления gadget</string>
@@ -2233,7 +2233,7 @@
     <string name="all">Все</string>
     <string name="android_properties">Свойства</string>
     <string name="apk_extract_dir">Каталог извлечения APK</string>
-    <string name="app_ops">App Ops</string>
+    <string name="app_ops">Операции приложений</string>
     <string name="app_ops_action_clear_data">Очистить данные</string>
     <string name="app_ops_action_disable">Отключить</string>
     <string name="app_ops_action_enable">Включить</string>
@@ -2390,7 +2390,7 @@
     <string name="partition_flash_empty_file">Выбранный файл пуст (0 байт).</string>
     <string name="partition_flash_size_exceeded">Размер файла (%1$s) превышает ёмкость раздела (%2$s)! Прошивка заблокирована во избежание повреждения.</string>
     <string name="partition_flash_src_label">Выберите файл образа для прошивки (.img):</string>
-    <string name="partition_flash_unsparse_to_file">Сохранить raw-образ (.img)</string>
+    <string name="partition_flash__image_to_file">Сохранить raw-образ (.img)</string>
     <string name="partition_info_title">Сведения о разделе</string>
     <string name="partition_opt_copy">Резервное копирование раздела (копия / дамп)</string>
     <string name="partition_opt_flash">Прошить образ в раздел</string>
@@ -2420,7 +2420,7 @@
     <string name="same_pane_target_gone">Целевая папка больше недоступна</string>
     <string name="save_to_original">Применить к оригиналу</string>
     <string name="search_key_or_value">Поиск по ключу или значению</string>
-    <string name="secure_settings">Secure</string>
+    <string name="secure_settings">Защищённые</string>
     <string name="set_edit">SetEdit</string>
     <string name="set_edit_subtitle">Редактирование системных, глобальных и secure-настроек Android</string>
     <string name="setedit_open_warning">Этот редактор изменяет системные, secure и глобальные настройки Android, а также системные свойства с правами root.\n\nИзменение или удаление неправильной настройки может вызвать сбои приложений, сломать функции устройства (камера, датчики, сеть) или потребовать сброса устройства для восстановления работы.\n\nИзменяйте только те значения, которые полностью понимаете. Лучше запишите исходное значение перед изменением.</string>
@@ -2433,7 +2433,7 @@
     <string name="sqlite_viewer">Просмотр SQLite</string>
     <string name="system_settings">Системные</string>
     <string name="tab_files">Файлы</string>
-    <string name="tab_shell">&gt;_ Shell</string>
+    <string name="tab_shell">&gt;_ Терминал</string>
     <string name="title_success">Успешно</string>
     <string name="tool_partition_dumper">Дампер разделов</string>
     <string name="tool_partition_dumper_subtitle">Дамп аппаратных и динамических разделов устройства в .img</string>
@@ -2498,4 +2498,78 @@
 <string name="installed_theme_import_failed">Не удалось импортировать эту тему. Текущая тема не изменилась.</string>
 <string name="installed_theme_selected">%1$s (выбрана)</string>
 <string name="installed_theme_description">%1$s — %2$s</string>
+    <string name="xposed_patcher_lite_title">LSPatch</string>
+    <string name="xposed_patcher_lite_message">Механизм патчинга Xposed (LSPatch) не входит в Lite-версию. Установите полную версию MP Manager, чтобы патчить APK со встроенными модулями.</string>
+    <string name="eye_protection_on">Защита зрения включена</string>
+    <string name="eye_protection_off">Защита зрения выключена</string>
+    <string name="unsparse_image_title">Распаковка Sparse-образа</string>
+    <string name="unsparse_image_msg">Этот файл представляет собой сжатый Android Sparse Image.
+Преобразовать его в обычный образ (.img)?</string>
+    <string name="unsparse_size_prefix">
+
+Размер после распаковки: %1$s</string>
+    <string name="unsparse_btn">📂 Распаковать</string>
+    <string name="unsparsing_progress">Распаковка %1$s…</string>
+    <string name="unsparsed_success">Образ успешно распакован: %1$s</string>
+    <string name="dex_to_java">DEX в Java (JADX)</string>
+    <string name="decompile_to_java_jadx">Декомпилировать в Java (JADX)</string>
+    <string name="open_in_java_mode">Открыть в режиме Java</string>
+    <string name="export_as_zip">Экспортировать в ZIP-архив</string>
+    <string name="export_to_directory">Экспортировать в папку</string>
+    <string name="java_saved_to">Исходный код Java сохранён в %1$s</string>
+    <string name="java_mode">Режим Java</string>
+    <string name="smali_mode">Режим Smali</string>
+    <string name="switch_to_java_mode">Переключиться в режим Java</string>
+    <string name="switch_to_smali_mode">Переключиться в режим Smali</string>
+    <string name="view_smali">Просмотр Smali</string>
+    <string name="plugin_hook_actions">Действия плагина</string>
+    <string name="plugin_show_action">Показать действие</string>
+    <string name="plugin_hide_action">Скрыть действие</string>
+    <string name="plugin_move_up">Переместить вверх</string>
+    <string name="plugin_move_down">Переместить вниз</string>
+    <string name="plugin_action_hidden">Скрыто: %1$s — %2$s</string>
+    <string name="plugin_action_slot">%1$s — %2$s</string>
+    <string name="plugin_events_enable">Разрешить автоматические события</string>
+    <string name="plugin_events_disable">Отключить автоматические события</string>
+    <string name="plugin_events_trust_first">Сначала доверьте этому плагину, чтобы разрешить автоматические события.</string>
+    <string name="plugin_events_consent">Разрешить плагину %1$s получать эти события во время использования MP Manager?
+
+%2$s
+
+События содержат активную цветовую палитру, а для file.opened — отображаемое имя файла и MIME-тип. Они не содержат содержимое файлов, пути к файлам, текст редактора или разрешения на доступ к файлам. Это разрешение не связано с разрешением на выполнение действия, которое вы запускаете нажатием.</string>
+    <string name="plugin_apply_theme">Применить тему плагина?</string>
+    <string name="plugin_apply_theme_message">%1$s запрашивает установленную тему «%2$s». MP Manager импортирует только проверенные данные оформления. Код плагина не будет выполняться в MP Manager.</string>
+    <string name="plugin_apply_theme_failed">Не удалось применить запрошенную тему плагина.</string>
+    <string name="copy_as_frida_snippet">Копировать как фрагмент Frida</string>
+    <string name="copy_as_xposed_snippet">Копировать как фрагмент Xposed</string>
+    <string name="nav_section_class">Класс</string>
+    <string name="nav_section_fields">Поля</string>
+    <string name="nav_section_method">Метод</string>
+    <string name="nav_menu_title">Меню</string>
+    <string name="edpref_line_spacing">Межстрочный интервал</string>
+    <string name="edpref_line_spacing_summary">Настройка множителя вертикального расстояния между строками</string>
+    <string name="edpref_show_indent_guides">Показывать направляющие отступов</string>
+    <string name="edpref_show_indent_guides_summary">Отображать вертикальные направляющие для блоков кода и отступов</string>
+    <string name="edpref_highlight_current_line">Подсвечивать текущую строку</string>
+    <string name="edpref_highlight_current_line_summary">Подсвечивать фон строки, в которой находится курсор</string>
+    <string name="edpref_pin_line_numbers">Закреплять номера строк</string>
+    <string name="edpref_pin_line_numbers_summary">Оставлять область с номерами строк неподвижной при горизонтальной прокрутке</string>
+    <string name="edpref_show_blank_symbols">Показывать пробельные символы</string>
+    <string name="edpref_show_blank_symbols_summary">Визуально отображать пробельные символы, например пробелы и табуляции</string>
+    <string name="edpref_hide_single_space">Скрывать одиночные пробелы</string>
+    <string name="edpref_hide_single_space_summary">Скрывать одиночные пробелы между словами, чтобы не загромождать текст</string>
+    <string name="edpref_show_invisible_characters">Показывать невидимые символы</string>
+    <string name="edpref_show_invisible_characters_summary">Обнаруживать и отмечать скрытые управляющие символы Unicode (ZWSP, NBSP и т. д.)</string>
+    <string name="edpref_wrap_without_splitting_words">Переносить строки без разделения слов</string>
+    <string name="edpref_wrap_without_splitting_words_summary">Не разделять слова при переносе на следующую строку</string>
+    <string name="edpref_auto_pair_brackets">Автоматически закрывать скобки и кавычки</string>
+    <string name="edpref_auto_pair_brackets_summary">Автоматически вставлять соответствующие закрывающие скобки и кавычки</string>
+    <string name="edpref_sticky_scroll">Закреплённая прокрутка</string>
+    <string name="edpref_sticky_scroll_summary">Закреплять заголовки содержащих классов и методов вверху при прокрутке</string>
+    <string name="edpref_auto_complete">Автодополнение</string>
+    <string name="edpref_auto_complete_summary">Показывать всплывающие подсказки кода во время ввода</string>
+    <string name="edpref_auto_complete_new_line_only">Автодополнение только в новых строках</string>
+    <string name="edpref_auto_complete_new_line_only_summary">Показывать подсказки только в начале строки, чтобы не отвлекать при вводе</string>
+    <string name="edpref_completion_on_enter">Применять подсказку по нажатию Enter</string>
+    <string name="edpref_completion_on_enter_summary">Выбирать и вставлять вариант автодополнения при нажатии клавиши Enter</string>
 </resources>
