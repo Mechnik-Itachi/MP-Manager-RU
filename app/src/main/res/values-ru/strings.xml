@@ -2522,24 +2522,6 @@
     <string name="switch_to_java_mode">Переключиться в режим Java</string>
     <string name="switch_to_smali_mode">Переключиться в режим Smali</string>
     <string name="view_smali">Просмотр Smali</string>
-    <string name="plugin_hook_actions">Действия плагина</string>
-    <string name="plugin_show_action">Показать действие</string>
-    <string name="plugin_hide_action">Скрыть действие</string>
-    <string name="plugin_move_up">Переместить вверх</string>
-    <string name="plugin_move_down">Переместить вниз</string>
-    <string name="plugin_action_hidden">Скрыто: %1$s — %2$s</string>
-    <string name="plugin_action_slot">%1$s — %2$s</string>
-    <string name="plugin_events_enable">Разрешить автоматические события</string>
-    <string name="plugin_events_disable">Отключить автоматические события</string>
-    <string name="plugin_events_trust_first">Сначала доверьте этому плагину, чтобы разрешить автоматические события.</string>
-    <string name="plugin_events_consent">Разрешить плагину %1$s получать эти события во время использования MP Manager?
-
-%2$s
-
-События содержат активную цветовую палитру, а для file.opened — отображаемое имя файла и MIME-тип. Они не содержат содержимое файлов, пути к файлам, текст редактора или разрешения на доступ к файлам. Это разрешение не связано с разрешением на выполнение действия, которое вы запускаете нажатием.</string>
-    <string name="plugin_apply_theme">Применить тему плагина?</string>
-    <string name="plugin_apply_theme_message">%1$s запрашивает установленную тему «%2$s». MP Manager импортирует только проверенные данные оформления. Код плагина не будет выполняться в MP Manager.</string>
-    <string name="plugin_apply_theme_failed">Не удалось применить запрошенную тему плагина.</string>
     <string name="copy_as_frida_snippet">Копировать как фрагмент Frida</string>
     <string name="copy_as_xposed_snippet">Копировать как фрагмент Xposed</string>
     <string name="nav_section_class">Класс</string>
