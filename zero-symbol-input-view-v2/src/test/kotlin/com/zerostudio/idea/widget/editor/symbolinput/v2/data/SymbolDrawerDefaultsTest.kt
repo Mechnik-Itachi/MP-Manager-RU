@@ -53,7 +53,7 @@ import org.junit.Test
 
 class SymbolDrawerDefaultsTest {
     @Test fun preservesCompleteV1FallbackSymbolSet() {
-        val group = SymbolDrawerDefaults.createGroups().single()
+        val group = SymbolDrawerDefaults.createGroups().first()
         assertEquals("Common", group.title)
         assertEquals(39, group.symbols.size)
         assertEquals(SymbolAction.MoveCursor(CursorTarget.LINE_START), group.symbols[0].longAction)
@@ -65,7 +65,7 @@ class SymbolDrawerDefaultsTest {
     }
 
     @Test fun newlineTabAndDollarDefaultsKeepTheirActualCharacters() {
-        val symbols = SymbolDrawerDefaults.createGroups().single().symbols
+        val symbols = SymbolDrawerDefaults.createGroups().first().symbols
         assertEquals("\n", (symbols[35].shortAction as SymbolAction.InsertText).template)
         assertEquals("\t", (symbols[36].shortAction as SymbolAction.InsertText).template)
         assertEquals("\$\$", (symbols[31].shortAction as SymbolAction.InsertText).template)

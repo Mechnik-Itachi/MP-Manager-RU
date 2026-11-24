@@ -102,6 +102,7 @@ object SymbolGroupBundleCodec {
     fun decode(json: String): List<SymbolGroup> {
         require(json.length <= MAX_BUNDLE_CHARS) { "Backup is too large" }
         val root = JsonParser.parseString(json)
+        tryDecodeMtManager(root)?.let { return it }
         if (root.isJsonArray) {
             val array = root.asJsonArray
             if (array.size() == 0 || array[0].asJsonObject.has("n") || array[0].asJsonObject.has("d")) {
@@ -234,5 +235,157 @@ object SymbolGroupBundleCodec {
             is SymbolAction.MoveCursor, is SymbolAction.Delete, is SymbolAction.TransformSelection,
             is SymbolAction.Clipboard, SymbolAction.OpenManager -> Unit
         }
+    }
+
+    private fun tryDecodeMtManager(root: com.google.gson.JsonElement): List<SymbolGroup>? {
+        val itemsArray: JsonArray = when {
+            root.isJsonArray -> root.asJsonArray
+            root.isJsonObject -> {
+                val obj = root.asJsonObject
+                when {
+                    obj.has("items") && obj.get("items").isJsonArray -> obj.getAsJsonArray("items")
+                    obj.has("functions") && obj.get("functions").isJsonArray -> obj.getAsJsonArray("functions")
+                    obj.has("list") && obj.get("list").isJsonArray -> obj.getAsJsonArray("list")
+                    obj.has("buttons") && obj.get("buttons").isJsonArray -> obj.getAsJsonArray("buttons")
+                    else -> null
+                }
+            }
+            else -> null
+        } ?: return null
+
+        if (itemsArray.size() == 0) return null
+
+        val first = itemsArray[0]
+        if (!first.isJsonObject) return null
+        val firstObj = first.asJsonObject
+        if (firstObj.has("n") || (firstObj.has("d") && !firstObj.has("b")) || (firstObj.has("t") && firstObj.has("s"))) {
+            return null
+        }
+        val isMtCandidate = (firstObj.has("b") && (firstObj.has("a") || firstObj.has("f") || firstObj.has("e"))) ||
+            firstObj.has("name") || firstObj.has("title") || firstObj.has("label") ||
+            firstObj.has("regex") || firstObj.has("search") || firstObj.has("find") ||
+            firstObj.has("shortPress") || firstObj.has("action") || firstObj.has("type")
+
+        if (!isMtCandidate) return null
+
+        val symbols = mutableListOf<SymbolEntry>()
+        for (i in 0 until itemsArray.size()) {
+            val elem = itemsArray[i]
+            if (!elem.isJsonObject) continue
+            val item = elem.asJsonObject
+
+            val name = when {
+                item.has("b") && item.get("b").isJsonPrimitive -> item.get("b").asString
+                item.has("name") && item.get("name").isJsonPrimitive -> item.get("name").asString
+                item.has("title") && item.get("title").isJsonPrimitive -> item.get("title").asString
+                item.has("label") && item.get("label").isJsonPrimitive -> item.get("label").asString
+                item.has("id") && item.get("id").isJsonPrimitive -> item.get("id").asString
+                else -> "Item ${i + 1}"
+            }
+
+            val action = parseMtAction(item) ?: continue
+            val longAction = if (item.has("e") && item.get("e").isJsonPrimitive && !item.get("e").asString.isNullOrBlank() && item.has("f")) {
+                SymbolAction.InsertText(item.get("e").asString)
+            } else if (item.has("longPress") && item.get("longPress").isJsonObject) {
+                parseMtAction(item.getAsJsonObject("longPress"))
+            } else if (item.has("longClick") && item.get("longClick").isJsonObject) {
+                parseMtAction(item.getAsJsonObject("longClick"))
+            } else null
+
+            symbols.add(
+                SymbolEntry(
+                    id = (i + 1).toLong(),
+                    label = name,
+                    shortAction = action,
+                    longAction = longAction,
+                    legacyShortActionId = if (action is SymbolAction.Extension) 101 else 0
+                )
+            )
+        }
+
+        if (symbols.isEmpty()) return null
+        return listOf(SymbolGroup("mt_manager_import", "MT Manager", symbols))
+    }
+
+    private fun parseMtAction(item: JsonObject): SymbolAction? {
+        if (item.has("f") && item.get("f").isJsonObject) {
+            val f = item.getAsJsonObject("f")
+            val search = if (f.has("a") && f.get("a").isJsonPrimitive) f.get("a").asString else ""
+            val replace = if (f.has("b") && f.get("b").isJsonPrimitive) f.get("b").asString else ""
+            val matchCase = if (f.has("c") && f.get("c").isJsonPrimitive) f.get("c").asBoolean else false
+            val isRegex = if (f.has("d") && f.get("d").isJsonPrimitive) {
+                if (f.get("d").asJsonPrimitive.isNumber) f.get("d").asInt == 1 else f.get("d").asBoolean
+            } else true
+            val replaceAll = if (f.has("e") && f.get("e").isJsonPrimitive) {
+                if (f.get("e").asJsonPrimitive.isNumber) f.get("e").asInt == 1 else f.get("e").asBoolean
+            } else true
+
+            val options = StringBuilder().apply {
+                if (isRegex) append('r')
+                if (matchCase) append('c')
+                if (replaceAll) append('a')
+            }.toString()
+
+            val payload = MpManagerFindReplaceEnvelope.encodePayload(search, replace, options)
+            return SymbolAction.Extension(MpManagerFindReplaceEnvelope.EXTENSION_ID, payload)
+        }
+
+        if (item.has("a") && item.get("a").isJsonPrimitive && item.get("a").asInt == 22) {
+            return SymbolAction.OpenManager
+        }
+
+        if (item.has("e") && item.get("e").isJsonPrimitive && !item.get("e").asString.isNullOrBlank()) {
+            return SymbolAction.InsertText(item.get("e").asString)
+        }
+
+        if (item.has("shortPress") && item.get("shortPress").isJsonObject) {
+            val nested = parseMtAction(item.getAsJsonObject("shortPress"))
+            if (nested != null) return nested
+        }
+        if (item.has("action") && item.get("action").isJsonObject) {
+            val nested = parseMtAction(item.getAsJsonObject("action"))
+            if (nested != null) return nested
+        }
+
+        val search = when {
+            item.has("search") && item.get("search").isJsonPrimitive -> item.get("search").asString
+            item.has("regex") && item.get("regex").isJsonPrimitive && !item.get("regex").asJsonPrimitive.isBoolean -> item.get("regex").asString
+            item.has("find") && item.get("find").isJsonPrimitive -> item.get("find").asString
+            item.has("pattern") && item.get("pattern").isJsonPrimitive -> item.get("pattern").asString
+            else -> null
+        }
+        val replace = when {
+            item.has("replace") && item.get("replace").isJsonPrimitive -> item.get("replace").asString
+            item.has("replacement") && item.get("replacement").isJsonPrimitive -> item.get("replacement").asString
+            item.has("replaceWith") && item.get("replaceWith").isJsonPrimitive -> item.get("replaceWith").asString
+            item.has("secondText") && item.get("secondText").isJsonPrimitive -> item.get("secondText").asString
+            else -> ""
+        }
+        if (search != null) {
+            val isRegex = if (item.has("isRegex")) item.get("isRegex").asBoolean else if (item.has("regex") && item.get("regex").isJsonPrimitive && item.get("regex").asJsonPrimitive.isBoolean) item.get("regex").asBoolean else true
+            val matchCase = if (item.has("matchCase")) item.get("matchCase").asBoolean else true
+            val replaceAll = if (item.has("replaceAll")) item.get("replaceAll").asBoolean else true
+            val options = StringBuilder().apply {
+                if (isRegex) append('r')
+                if (matchCase) append('c')
+                if (replaceAll) append('a')
+            }.toString()
+
+            val payload = MpManagerFindReplaceEnvelope.encodePayload(search, replace, options)
+            return SymbolAction.Extension(MpManagerFindReplaceEnvelope.EXTENSION_ID, payload)
+        }
+
+        val insertText = when {
+            item.has("insert") && item.get("insert").isJsonPrimitive -> item.get("insert").asString
+            item.has("text") && item.get("text").isJsonPrimitive -> item.get("text").asString
+            item.has("snippet") && item.get("snippet").isJsonPrimitive -> item.get("snippet").asString
+            item.has("content") && item.get("content").isJsonPrimitive -> item.get("content").asString
+            else -> null
+        }
+        if (insertText != null) {
+            return SymbolAction.InsertText(insertText)
+        }
+
+        return null
     }
 }

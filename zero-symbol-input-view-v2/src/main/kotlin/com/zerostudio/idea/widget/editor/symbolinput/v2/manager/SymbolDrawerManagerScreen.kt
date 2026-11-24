@@ -48,6 +48,7 @@ package com.zerostudio.idea.widget.editor.symbolinput.v2.manager
 import com.zerostudio.idea.widget.editor.symbolinput.v2.R
 
 import android.content.Context
+import android.content.ClipData
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
@@ -292,7 +293,7 @@ class SymbolDrawerManagerScreen(
         setPadding(dp(12), dp(12), dp(12), dp(12))
         background = roundedSurface(surfaceColor(), 18)
         if (manager.groups.isEmpty()) {
-            manager.replaceAll(SymbolDrawerDefaults.createGroups(context))
+            manager.replaceAll(SymbolDrawerDefaults.createDefaultGroups(context))
         }
         buildHeader()
         buildGroupControls()
@@ -457,34 +458,103 @@ class SymbolDrawerManagerScreen(
      * the complete payload before replacing current data. Existing import undo
      * behaviour is preserved.
      */
-    fun importMtManagerJson(json: String) {
+    fun createGroupWithImportedSymbols(title: String, rawSymbols: List<SymbolEntry>) {
         val previous = manager.groups.toList()
         val previousUsage = snapshotUsageState()
         val previousSelection = selectedGroupId
-        val imported = LegacySymbolDataCodec.decode(json)
-        manager.replaceAll(imported)
-        selectedGroupId = imported.firstOrNull()?.id
-        refresh()
-        showUndo(context.getString(R.string.symbol_drawer_096)) {
-            manager.replaceAll(previous)
-            restoreUsageState(previousUsage)
-            selectedGroupId = previousSelection
-        }
-    }
 
-    fun importBundle(json: String) {
-        val previous = manager.groups.toList()
-        val previousUsage = snapshotUsageState()
-        val previousSelection = selectedGroupId
-        val imported = SymbolGroupBundleCodec.decode(json)
-        manager.replaceAll(imported)
-        selectedGroupId = imported.firstOrNull()?.id
+        val existingGroupIds = previous.mapTo(mutableSetOf()) { it.id }
+        var newGroupId = "group_${System.currentTimeMillis()}_${(100..999).random()}"
+        while (newGroupId in existingGroupIds) {
+            newGroupId = "group_${System.currentTimeMillis()}_${(100..999).random()}"
+        }
+
+        val usedSymbolIds = previous.asSequence()
+            .flatMap { it.symbols.asSequence() }
+            .mapTo(mutableSetOf()) { it.id }
+        val reservedIds = (usedSymbolIds + rawSymbols.map { it.id }).toMutableSet()
+        var candidate = 1L
+
+        val sanitizedSymbols = rawSymbols.map { symbol ->
+            if (symbol.id != 0L && usedSymbolIds.add(symbol.id)) {
+                symbol
+            } else {
+                while (candidate == 0L || candidate in reservedIds || candidate in usedSymbolIds) {
+                    candidate++
+                }
+                val assigned = candidate++
+                usedSymbolIds += assigned
+                symbol.copy(id = assigned)
+            }
+        }
+
+        val newGroup = SymbolGroup(
+            id = newGroupId,
+            title = title,
+            symbols = sanitizedSymbols
+        )
+
+        val merged = previous + newGroup
+        manager.replaceAll(merged)
+        selectedGroupId = newGroup.id
         refresh()
+        liveDrawer?.submitGroups(manager.groups, preserveSelectedGroup = true)
+        onGroupsChanged?.invoke(manager.groups)
+        toast("Imported successfully")
+
         showUndo(context.getString(R.string.symbol_drawer_097)) {
             manager.replaceAll(previous)
             restoreUsageState(previousUsage)
             selectedGroupId = previousSelection
+            liveDrawer?.submitGroups(manager.groups, preserveSelectedGroup = true)
+            onGroupsChanged?.invoke(manager.groups)
         }
+    }
+
+    fun promptImportGroupNameAndAdd(json: String) {
+        runCatching {
+            val imported = SymbolGroupBundleCodec.decode(json)
+            val symbols = imported.flatMap { it.symbols }
+            require(symbols.isNotEmpty()) { "No symbols found in JSON" }
+            val defaultName = imported.firstOrNull()?.title?.takeIf {
+                it.isNotBlank() && it != "mt_manager_import"
+            } ?: context.getString(R.string.symbol_drawer_147)
+
+            val input = TextInputEditText(context).apply {
+                setText(defaultName)
+                setSelection(text?.length ?: 0)
+            }
+            val layout = TextInputLayout(context).apply {
+                hint = context.getString(R.string.symbol_drawer_147)
+                addView(input)
+                setPadding(dp(20), dp(10), dp(20), dp(10))
+            }
+
+            MaterialAlertDialogBuilder(context)
+                .setTitle(context.getString(R.string.symbol_drawer_147))
+                .setView(layout)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    val title = input.text?.toString()?.trim().takeUnless { it.isNullOrBlank() } ?: defaultName
+                    createGroupWithImportedSymbols(title, symbols)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }.onFailure { err ->
+            toast("Import failed: ${err.message}")
+        }
+    }
+
+    /**
+     * Imports a legacy compact symbol JSON file. Decoding is strict and validates
+     * the complete payload before replacing current data. Existing import undo
+     * behaviour is preserved.
+     */
+    fun importMtManagerJson(json: String) {
+        promptImportGroupNameAndAdd(json)
+    }
+
+    fun importBundle(json: String) {
+        promptImportGroupNameAndAdd(json)
     }
 
     private fun buildHeader() {
@@ -499,6 +569,8 @@ class SymbolDrawerManagerScreen(
             minHeight = dp(40)
             insetTop = 0
             insetBottom = 0
+            isSingleLine = true
+            maxLines = 1
             icon = context.getDrawable(android.R.drawable.ic_menu_search)
             iconSize = dp(18)
             iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
@@ -516,6 +588,8 @@ class SymbolDrawerManagerScreen(
             minHeight = dp(40)
             insetTop = 0
             insetBottom = 0
+            isSingleLine = true
+            maxLines = 1
             icon = context.getDrawable(android.R.drawable.ic_menu_more)
             iconSize = dp(18)
             iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
@@ -543,6 +617,14 @@ class SymbolDrawerManagerScreen(
             }
             true
         }
+        menu.menu.add("Import (JSON / MT Manager)").setOnMenuItemClickListener {
+            promptImport()
+            true
+        }
+        menu.menu.add("Export").setOnMenuItemClickListener {
+            promptExport()
+            true
+        }
         val filters = menu.menu.addSubMenu(context.getString(R.string.symbol_drawer_191))
         buildList {
             add(ManagerSymbolFilter.ALL to context.getString(R.string.symbol_drawer_035))
@@ -562,6 +644,63 @@ class SymbolDrawerManagerScreen(
     private fun setActiveFilter(filter: ManagerSymbolFilter) {
         activeFilter = filter
         refreshSymbols()
+    }
+
+    fun promptImport() {
+        val options = arrayOf("Select JSON File", "Paste JSON from Clipboard")
+        MaterialAlertDialogBuilder(context)
+            .setTitle("Import (JSON / MT Manager)")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).apply {
+                            type = "*/*"
+                            addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                        }
+                        val act = context as? android.app.Activity
+                        if (act != null) {
+                            act.startActivityForResult(intent, 2001)
+                        } else {
+                            toast("Cannot open file picker")
+                        }
+                    }
+                    1 -> {
+                        val input = TextInputEditText(context)
+                        val layout = TextInputLayout(context).apply {
+                            hint = "Paste JSON here"
+                            addView(input)
+                            setPadding(dp(16), dp(8), dp(16), 0)
+                        }
+                        MaterialAlertDialogBuilder(context)
+                            .setTitle("Paste JSON")
+                            .setView(layout)
+                            .setPositiveButton(android.R.string.ok) { _, _ ->
+                                val text = input.text?.toString()?.trim().orEmpty()
+                                if (text.isNotEmpty()) {
+                                    promptImportGroupNameAndAdd(text)
+                                }
+                            }
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .show()
+                    }
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    fun promptExport() {
+        val options = arrayOf("Export MT Manager JSON (FunctionBar.json)", "Export Full V2 Backup JSON")
+        MaterialAlertDialogBuilder(context)
+            .setTitle("Export")
+            .setItems(options) { _, which ->
+                val json = if (which == 0) exportMtManagerJson() else exportBundle()
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("SymbolDrawer", json))
+                toast("Exported and copied to clipboard")
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun buildGroupControls() {
