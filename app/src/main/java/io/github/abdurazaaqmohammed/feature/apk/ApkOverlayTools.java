@@ -25,6 +25,7 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.text.format.Formatter;
 import android.util.Base64;
 import android.view.ActionMode;
 import android.view.Gravity;
@@ -78,6 +79,7 @@ import io.github.abdurazaaqmohammed.ui.main.UIHelper;
 import io.github.abdurazaaqmohammed.ui.UiFields;
 import io.github.abdurazaaqmohammed.ui.editor.FilePickerDialog;
 import io.github.abdurazaaqmohammed.util.io.ProgressManager;
+import io.github.abdurazaaqmohammed.util.misc.AppExecutors;
 
 /**
  * Toast/dialog overlay injection UI extracted from ApkToolsHandler.
@@ -105,6 +107,7 @@ public class ApkOverlayTools {
 
     private ImageView overlayImagePreviewView;
     private String overlayImageBase64;
+    private String overlayVideoPath;
     private OverlayForm activeOverlayForm;
     private Runnable activeAdvRender;
     private static OverlayInjectorUtil.AdvWidget styleClipboard;
@@ -166,7 +169,7 @@ public class ApkOverlayTools {
     }
 
     private void decodePickedImage(Uri uri, ImagePicked cb) {
-        new Thread(() -> {
+        AppExecutors.io().execute(() -> {
             try {
                 Bitmap bitmap = decodeSampledBitmap(uri, 512);
                 if (bitmap == null) throw new IOException("Cannot decode image");
@@ -188,7 +191,7 @@ public class ApkOverlayTools {
             } catch (Exception e) {
                 context.handler.post(() -> Extensions.showMessage(context, "Image failed: " + e.getMessage()));
             }
-        }).start();
+        });
     }
     private void loadOverlayImage(Uri uri) {
         decodePickedImage(uri, (thumb, b64) -> {
@@ -275,7 +278,18 @@ public class ApkOverlayTools {
         MaterialSwitch toastHtml;
         MaterialSwitch toastB64;
         MaterialSwitch cancelSwitch;
-        MaterialSwitch dontShowSwitch;
+        MaterialAutoCompleteTextView showModeTv;
+        MaterialSwitch movableSwitch;
+        MaterialSwitch countdownSwitch;
+        View countdownBox;
+        TextInputEditText countdownSecInput;
+        View previewCountdownRow;
+        TextView previewCountdownText;
+        MaterialAutoCompleteTextView mediaTv;
+        LinearLayout mediaBox;
+        MaterialButton pickMediaBtn;
+        TextView videoSummaryTv;
+        TextView videoWarnTv;
         MaterialSwitch dlgHtml;
         MaterialSwitch dlgB64;
         LinearLayout toastSection;
@@ -287,6 +301,7 @@ public class ApkOverlayTools {
         TextView dlgPreviewTitle;
         TextView dlgPreviewMsg;
         ImageView dlgPreviewImage;
+        TextView dlgPreviewVideoTv;
         LinearLayout dlgPreviewBox;
         MaterialSwitch bgSwitch;
         MaterialSwitch animSwitch;
@@ -323,6 +338,8 @@ public class ApkOverlayTools {
         boolean animOn;
         int animMs = 500;
         int titleC;
+        MaterialAutoCompleteTextView hookMethodTv;
+        MaterialSwitch protectCodeSwitch;
     }
 
     private OverlayForm fillForm(View view) {
@@ -348,9 +365,22 @@ public class ApkOverlayTools {
         f.toastHtml = view.findViewById(R.id.overlayToastHtml);
         f.toastB64 = view.findViewById(R.id.overlayToastB64);
         f.cancelSwitch = view.findViewById(R.id.overlayDlgCancelable);
-        f.dontShowSwitch = view.findViewById(R.id.overlayDlgDontShow);
+        f.showModeTv = view.findViewById(R.id.overlayDlgShowModeTv);
+        f.movableSwitch = view.findViewById(R.id.overlayDlgMovable);
+        f.countdownSwitch = view.findViewById(R.id.overlayDlgCountdown);
+        f.countdownBox = view.findViewById(R.id.overlayDlgCountdownBox);
+        f.countdownSecInput = view.findViewById(R.id.overlayDlgCountdownSec);
+        f.previewCountdownRow = view.findViewById(R.id.overlayDlgPreviewCountdownRow);
+        f.previewCountdownText = view.findViewById(R.id.overlayDlgPreviewCountdownText);
+        f.mediaTv = view.findViewById(R.id.overlayDlgMediaTv);
+        f.mediaBox = view.findViewById(R.id.overlayDlgMediaBox);
+        f.pickMediaBtn = view.findViewById(R.id.overlayDlgPickMediaBtn);
+        f.videoSummaryTv = view.findViewById(R.id.overlayDlgVideoSummary);
+        f.videoWarnTv = view.findViewById(R.id.overlayDlgVideoWarn);
         f.dlgHtml = view.findViewById(R.id.overlayDlgHtml);
         f.dlgB64 = view.findViewById(R.id.overlayDlgB64);
+        f.hookMethodTv = view.findViewById(R.id.overlayHookMethod);
+        f.protectCodeSwitch = view.findViewById(R.id.overlayProtectCode);
         f.toastSection = view.findViewById(R.id.overlayToastSection);
         f.dialogSection = view.findViewById(R.id.overlayDialogSection);
         f.posBox = view.findViewById(R.id.overlayPosBox);
@@ -360,6 +390,7 @@ public class ApkOverlayTools {
         f.dlgPreviewTitle = view.findViewById(R.id.overlayDlgPreviewTitle);
         f.dlgPreviewMsg = view.findViewById(R.id.overlayDlgPreviewMsg);
         f.dlgPreviewImage = view.findViewById(R.id.overlayDlgPreviewImage);
+        f.dlgPreviewVideoTv = view.findViewById(R.id.overlayDlgPreviewVideoTv);
         f.dlgPreviewBox = view.findViewById(R.id.overlayDlgPreviewBox);
         f.bgSwitch = view.findViewById(R.id.overlayBgSwitch);
         f.animSwitch = view.findViewById(R.id.overlayAnimSwitch);
@@ -400,11 +431,28 @@ public class ApkOverlayTools {
         toast.yOffset = clampOffset(textOf(f.yInput));
         toast.html = f.toastHtml.isChecked();
         toast.base64 = f.toastB64.isChecked();
+        toast.hookMethod = selectedHookMethod(f);
+        toast.protectCode = f.protectCodeSwitch != null && f.protectCodeSwitch.isChecked();
         if (toast.message.isEmpty()) {
             Extensions.showMessage(context, "Enter a message");
             return null;
         }
         return toast;
+    }
+
+    private String selectedHookMethod(OverlayForm f) {
+        return "onResume".equals(textOf(f.hookMethodTv)) ? "onResume" : "onCreate";
+    }
+
+    private void applyBehaviorToOptions(OverlayForm f, OverlayInjectorUtil.DialogOptions dlg) {
+        String showMode = textOf(f.showModeTv);
+        String showOnceLabel = context.rss.getString(R.string.show_once);
+        String dontShowLabel = context.rss.getString(R.string.don_t_show_again_button);
+        dlg.showOnce = showOnceLabel.equals(showMode);
+        dlg.dontShowAgain = dontShowLabel.equals(showMode);
+        dlg.draggable = f.movableSwitch != null && f.movableSwitch.isChecked();
+        dlg.hookMethod = selectedHookMethod(f);
+        dlg.protectCode = f.protectCodeSwitch != null && f.protectCodeSwitch.isChecked();
     }
 
     private OverlayInjectorUtil.DialogOptions collectDialog(OverlayForm f) {
@@ -420,19 +468,39 @@ public class ApkOverlayTools {
         dlg.neutralUrl = f.neuBox.getVisibility() == View.VISIBLE ? actionUrl(f.neuAction, f.neuUrl, badUrl) : null;
         if (badUrl[0]) return null;
         dlg.cancelable = f.cancelSwitch.isChecked();
-        dlg.dontShowAgain = f.dontShowSwitch.isChecked();
-        dlg.imageBase64 = overlayImageBase64;
+        dlg.countdown = f.countdownSwitch != null && f.countdownSwitch.isChecked();
+        dlg.countdownSeconds = Math.max(1, Math.min(300, parseIntSafe(textOf(f.countdownSecInput), 3)));
+        applyBehaviorToOptions(f, dlg);
+        String mediaMode = textOf(f.mediaTv);
+        String videoLabel = context.rss.getString(R.string.media_video);
+        String picLabel = context.rss.getString(R.string.media_picture);
+        if (videoLabel.equals(mediaMode)) {
+            if (overlayVideoPath == null || overlayVideoPath.isEmpty()) {
+                Extensions.showMessage(context, R.string.choose_video_required);
+                return null;
+            }
+            dlg.videoPath = overlayVideoPath;
+            dlg.imageBase64 = null;
+        } else if (picLabel.equals(mediaMode)) {
+            dlg.imageBase64 = overlayImageBase64;
+            dlg.videoPath = null;
+        } else {
+            dlg.imageBase64 = null;
+            dlg.videoPath = null;
+        }
         dlg.html = f.dlgHtml.isChecked();
         dlg.base64 = f.dlgB64.isChecked();
         collectStyle(f, dlg);
         dlg.titleColor = f.titleC;
         dlg.dlgFont = f.dlgFont;
         dlg.dlgFontPath = f.dlgFontPath;
-        if (dlg.message.isEmpty() && dlg.title.isEmpty()) {
+        boolean hasMedia = (dlg.imageBase64 != null && !dlg.imageBase64.isEmpty())
+                || (dlg.videoPath != null && !dlg.videoPath.isEmpty());
+        if (dlg.message.isEmpty() && dlg.title.isEmpty() && !hasMedia) {
             Extensions.showMessage(context, "Enter a title or message");
             return null;
         }
-        if (dlg.positive.isEmpty() && dlg.negative.isEmpty() && dlg.neutral.isEmpty()) {
+        if (!dlg.countdown && dlg.positive.isEmpty() && dlg.negative.isEmpty() && dlg.neutral.isEmpty()) {
             dlg.positive = "OK";
         }
         return dlg;
@@ -467,7 +535,7 @@ public class ApkOverlayTools {
             }
         }
         if (!hasButton) dlg.cancelable = true;
-        dlg.dontShowAgain = f.dontShowSwitch.isChecked();
+        applyBehaviorToOptions(f, dlg);
         dlg.html = f.dlgHtml.isChecked();
         dlg.base64 = f.dlgB64.isChecked();
         return dlg;
@@ -520,6 +588,15 @@ public class ApkOverlayTools {
         if (e != null) e.setText(s == null ? "" : s);
     }
 
+    private static void applyProtectionUi(OverlayForm f, String hookMethod, boolean protectCode) {
+        if (f.hookMethodTv != null) {
+            f.hookMethodTv.setText("onResume".equals(hookMethod) ? "onResume" : "onCreate", false);
+        }
+        if (f.protectCodeSwitch != null) {
+            f.protectCodeSwitch.setChecked(protectCode);
+        }
+    }
+
     private void applyToast(OverlayForm f, OverlayInjectorUtil.ToastOptions o) {
         setText(f.messageInput, o.message);
         f.durationTv.setText(o.longDuration ? "Long" : "Short", false);
@@ -528,6 +605,7 @@ public class ApkOverlayTools {
         setText(f.yInput, String.valueOf(o.yOffset));
         f.toastHtml.setChecked(o.html);
         f.toastB64.setChecked(o.base64);
+        applyProtectionUi(f, o.hookMethod, o.protectCode);
     }
 
     private void applyDialog(OverlayForm f, OverlayInjectorUtil.DialogOptions o) {
@@ -536,10 +614,18 @@ public class ApkOverlayTools {
         setupButtonBox(f.posBox, R.id.overlayPosAddBtn, f.posInput, o.positive, f.posAction, f.posUrl, o.positiveUrl);
         setupButtonBox(f.negBox, R.id.overlayNegAddBtn, f.negInput, o.negative, f.negAction, f.negUrl, o.negativeUrl);
         setupButtonBox(f.neuBox, R.id.overlayNeuAddBtn, f.neuInput, o.neutral, f.neuAction, f.neuUrl, o.neutralUrl);
+        if (f.countdownSwitch != null) f.countdownSwitch.setChecked(o.countdown);
+        if (f.countdownBox != null) f.countdownBox.setVisibility(o.countdown ? View.VISIBLE : View.GONE);
+        setText(f.countdownSecInput, String.valueOf(o.countdownSeconds > 0 ? o.countdownSeconds : 3));
         f.cancelSwitch.setChecked(o.cancelable);
-        f.dontShowSwitch.setChecked(o.dontShowAgain);
+        String modeLabel = o.showOnce ? context.rss.getString(R.string.show_once)
+                : o.dontShowAgain ? context.rss.getString(R.string.don_t_show_again_button)
+                : context.rss.getString(R.string.always_show);
+        if (f.showModeTv != null) f.showModeTv.setText(modeLabel, false);
+        if (f.movableSwitch != null) f.movableSwitch.setChecked(o.draggable);
         f.dlgHtml.setChecked(o.html);
         f.dlgB64.setChecked(o.base64);
+        applyProtectionUi(f, o.hookMethod, o.protectCode);
         f.bgSwitch.setChecked(o.bgEnabled);
         f.bgC1 = o.bgColor1;
         f.bgC2 = o.bgColor2;
@@ -570,8 +656,16 @@ public class ApkOverlayTools {
         f.borderDp = o.borderWidthDp;
         f.orient = o.bgOrientation;
         overlayImageBase64 = o.imageBase64;
+        overlayVideoPath = o.videoPath;
+        String mediaLabel = (o.videoPath != null && !o.videoPath.isEmpty())
+                ? context.rss.getString(R.string.media_video)
+                : (o.imageBase64 != null && !o.imageBase64.isEmpty())
+                        ? context.rss.getString(R.string.media_picture)
+                        : context.rss.getString(R.string.media_none);
+        if (f.mediaTv != null) f.mediaTv.setText(mediaLabel, false);
         refreshStyleLabels(f);
         refreshFontLabels(f);
+        syncMediaUi(f);
         updatePreviewImage(f);
         syncUrlBoxes(f);
     }
@@ -723,9 +817,51 @@ public class ApkOverlayTools {
         }
     }
 
+    private String formatVideoSummary(String path) {
+        if (path == null || path.isEmpty()) return "";
+        File f = new File(path);
+        String size = Formatter.formatFileSize(context, f.isFile() ? f.length() : 0L);
+        return context.rss.getString(R.string.video_selected_format, f.getName(), size);
+    }
+
+    private void syncMediaUi(OverlayForm f) {
+        if (f == null || f.mediaTv == null) return;
+        String mode = textOf(f.mediaTv);
+        String picLabel = context.rss.getString(R.string.media_picture);
+        String vidLabel = context.rss.getString(R.string.media_video);
+        boolean isPic = picLabel.equals(mode);
+        boolean isVid = vidLabel.equals(mode);
+        if (f.mediaBox != null) f.mediaBox.setVisibility((isPic || isVid) ? View.VISIBLE : View.GONE);
+        if (f.pickMediaBtn != null) {
+            f.pickMediaBtn.setText(isVid ? R.string.choose_video : R.string.dialog_image);
+        }
+        if (f.videoWarnTv != null) f.videoWarnTv.setVisibility(isVid ? View.VISIBLE : View.GONE);
+        if (f.videoSummaryTv != null) {
+            String summary = isVid ? formatVideoSummary(overlayVideoPath) : "";
+            f.videoSummaryTv.setText(summary);
+            f.videoSummaryTv.setVisibility(!summary.isEmpty() ? View.VISIBLE : View.GONE);
+        }
+        if (overlayImagePreviewView != null && !isPic) {
+            overlayImagePreviewView.setImageBitmap(null);
+            overlayImagePreviewView.setVisibility(View.GONE);
+        }
+    }
+
     private void updatePreviewImage(OverlayForm f) {
+        String mode = f.mediaTv != null ? textOf(f.mediaTv) : "";
+        boolean isVid = context.rss.getString(R.string.media_video).equals(mode);
+        if (f.dlgPreviewVideoTv != null) {
+            String summary = isVid ? formatVideoSummary(overlayVideoPath) : "";
+            f.dlgPreviewVideoTv.setText(summary);
+            f.dlgPreviewVideoTv.setVisibility(!summary.isEmpty() ? View.VISIBLE : View.GONE);
+        }
+        if (isVid) {
+            f.dlgPreviewImage.setVisibility(View.GONE);
+            return;
+        }
         try {
-            if (overlayImageBase64 != null && !overlayImageBase64.isEmpty()) {
+            if (overlayImageBase64 != null && !overlayImageBase64.isEmpty()
+                    && context.rss.getString(R.string.media_picture).equals(mode)) {
                 byte[] bytes = Base64.decode(overlayImageBase64, Base64.DEFAULT);
                 Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
                 if (bitmap != null) {
@@ -1101,6 +1237,38 @@ public class ApkOverlayTools {
         void apply(String font, String fontPath);
     }
 
+    private interface VideoPicked {
+        void onVideo(String path);
+    }
+
+    private void pickVideoFile(VideoPicked cb) {
+        try {
+            FilePickerDialog.Properties props = new FilePickerDialog.Properties();
+            props.selection_mode = FilePickerDialog.SINGLE_MODE;
+            props.selection_type = FilePickerDialog.FILE_SELECT;
+            props.extensions = new String[]{"mp4", "webm", "3gp", "mkv", "mov"};
+            props.preferenceKey = "overlay_video";
+            FilePickerDialog dlg = new FilePickerDialog(context, props);
+            dlg.setTitle(context.getString(R.string.choose_video));
+            dlg.setDialogSelectionListener(files -> {
+                if (files == null || files.length == 0 || files[0] == null) return;
+                File src = new File(files[0]);
+                if (!src.isFile() || src.length() <= 0) {
+                    Extensions.showMessage(context, R.string.choose_video_required);
+                    return;
+                }
+                if (src.length() > OverlayInjectorUtil.MAX_VIDEO_BYTES) {
+                    Extensions.showMessage(context, R.string.video_too_large);
+                    return;
+                }
+                if (cb != null) cb.onVideo(src.getAbsolutePath());
+            });
+            dlg.show();
+        } catch (Exception e) {
+            Extensions.showMessage(context, R.string.choose_video_required);
+        }
+    }
+
     private void pickFontFile(FontPicked cb) {
         try {
             FilePickerDialog.Properties props = new FilePickerDialog.Properties();
@@ -1121,7 +1289,7 @@ public class ApkOverlayTools {
     }
 
     private void onFontFilePicked(File src, FontPicked cb) {
-        new Thread(() -> {
+        AppExecutors.io().execute(() -> {
             try {
                 if (src == null || !src.isFile()) throw new IOException("Not a file");
                 String lower = src.getName().toLowerCase(Locale.ROOT);
@@ -1152,7 +1320,7 @@ public class ApkOverlayTools {
             } catch (Exception e) {
                 context.handler.post(() -> Extensions.showMessage(context, "Font failed: " + e.getMessage()));
             }
-        }).start();
+        });
     }
 
     private static String baseName(String path) {
@@ -1912,7 +2080,6 @@ public class ApkOverlayTools {
         MaterialAutoCompleteTextView dlgNeuAction = view.findViewById(R.id.overlayDlgNeuAction);
         TextInputEditText dlgNeuUrl = view.findViewById(R.id.overlayDlgNeuUrl);
         MaterialSwitch cancelSwitch = view.findViewById(R.id.overlayDlgCancelable);
-        MaterialSwitch dontShowSwitch = view.findViewById(R.id.overlayDlgDontShow);
         MaterialSwitch dlgHtmlSwitch = view.findViewById(R.id.overlayDlgHtml);
         MaterialSwitch dlgB64Switch = view.findViewById(R.id.overlayDlgB64);
         TextView dlgPreviewTitle = view.findViewById(R.id.overlayDlgPreviewTitle);
@@ -1963,6 +2130,20 @@ public class ApkOverlayTools {
                     }
                     updateStylePreview(form);
                     updatePreviewImage(form);
+                    if (form.countdownSwitch.isChecked()) {
+                        int sec = 3;
+                        try {
+                            String secStr = form.countdownSecInput.getText() == null ? "" : form.countdownSecInput.getText().toString().trim();
+                            if (!secStr.isEmpty()) {
+                                sec = Math.max(1, Math.min(60, Integer.parseInt(secStr)));
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        form.previewCountdownRow.setVisibility(View.VISIBLE);
+                        form.previewCountdownText.setText(sec + "s");
+                    } else {
+                        form.previewCountdownRow.setVisibility(View.GONE);
+                    }
                 }
             } catch (Exception ignored) {
             }
@@ -1982,6 +2163,14 @@ public class ApkOverlayTools {
         dlgTitleInput.addTextChangedListener(previewWatcher);
         dlgMsgInput.addTextChangedListener(previewWatcher);
         toastHtmlSwitch.setOnCheckedChangeListener((b, c) -> updatePreview.run());
+        form.countdownSecInput.addTextChangedListener(previewWatcher);
+        form.countdownSwitch.setOnCheckedChangeListener((b, c) -> {
+            form.countdownBox.setVisibility(c ? View.VISIBLE : View.GONE);
+            if (c && cancelSwitch.isChecked()) {
+                cancelSwitch.setChecked(false);
+            }
+            updatePreview.run();
+        });
         dlgHtmlSwitch.setOnCheckedChangeListener((b, c) -> {
             updatePreview.run();
             renderAdv[0].run();
@@ -2109,17 +2298,68 @@ public class ApkOverlayTools {
             refreshProfiles(form, isToast);
         });
 
+        overlayImageBase64 = null;
+        overlayVideoPath = null;
         overlayImagePreviewView = view.findViewById(R.id.overlayDlgImagePreview);
         overlayImagePreviewView.setVisibility(View.GONE);
         overlayImagePreviewView.setImageBitmap(null);
-        view.findViewById(R.id.overlayDlgImageBtn).setOnClickListener(v -> pickImage((thumb, b64) -> {
-            overlayImageBase64 = b64;
-            if (overlayImagePreviewView != null) {
-                overlayImagePreviewView.setImageBitmap(thumb);
-                overlayImagePreviewView.setVisibility(View.VISIBLE);
-            }
-            if (activeOverlayForm != null) updatePreviewImage(activeOverlayForm);
-        }));
+        String alwaysShowLabel = context.rss.getString(R.string.always_show);
+        String[] showModes = {
+                alwaysShowLabel,
+                context.rss.getString(R.string.show_once),
+                context.rss.getString(R.string.don_t_show_again_button)
+        };
+        if (form.showModeTv != null) {
+            form.showModeTv.setAdapter(new ArrayAdapter<>(context,
+                    android.R.layout.simple_dropdown_item_1line, showModes));
+            form.showModeTv.setText(alwaysShowLabel, false);
+        }
+        String mediaNoneLabel = context.rss.getString(R.string.media_none);
+        String mediaPicLabel = context.rss.getString(R.string.media_picture);
+        String mediaVidLabel = context.rss.getString(R.string.media_video);
+        String[] mediaModes = {mediaNoneLabel, mediaPicLabel, mediaVidLabel};
+        if (form.mediaTv != null) {
+            form.mediaTv.setAdapter(new ArrayAdapter<>(context,
+                    android.R.layout.simple_dropdown_item_1line, mediaModes));
+            form.mediaTv.setText(mediaNoneLabel, false);
+            form.mediaTv.setOnItemClickListener((p, v, pos, id) -> {
+                if (pos == 0) {
+                    overlayImageBase64 = null;
+                    overlayVideoPath = null;
+                } else if (pos == 1) {
+                    overlayVideoPath = null;
+                } else {
+                    overlayImageBase64 = null;
+                }
+                syncMediaUi(form);
+                updatePreview.run();
+            });
+        }
+        syncMediaUi(form);
+        if (form.pickMediaBtn != null) {
+            form.pickMediaBtn.setOnClickListener(v -> {
+                String sel = textOf(form.mediaTv);
+                if (mediaVidLabel.equals(sel)) {
+                    pickVideoFile(path -> {
+                        overlayVideoPath = path;
+                        overlayImageBase64 = null;
+                        syncMediaUi(form);
+                        updatePreview.run();
+                    });
+                } else {
+                    pickImage((thumb, b64) -> {
+                        overlayImageBase64 = b64;
+                        overlayVideoPath = null;
+                        if (overlayImagePreviewView != null) {
+                            overlayImagePreviewView.setImageBitmap(thumb);
+                            overlayImagePreviewView.setVisibility(View.VISIBLE);
+                        }
+                        syncMediaUi(form);
+                        updatePreview.run();
+                    });
+                }
+            });
+        }
 
         LinearLayout posBox = view.findViewById(R.id.overlayPosBox);
         LinearLayout negBox = view.findViewById(R.id.overlayNegBox);
@@ -2148,6 +2388,13 @@ public class ApkOverlayTools {
             neuBox.setVisibility(View.GONE);
             view.findViewById(R.id.overlayNeuAddBtn).setVisibility(View.VISIBLE);
         });
+
+        if (form.hookMethodTv != null) {
+            form.hookMethodTv.setAdapter(new ArrayAdapter<>(context,
+                    android.R.layout.simple_dropdown_item_1line,
+                    new String[]{"onCreate", "onResume"}));
+            form.hookMethodTv.setText("onCreate", false);
+        }
 
         MaterialCheckBox autosign = view.findViewById(R.id.overlayAutosign);
         autosign.setChecked(sign[0] = settings.getBoolean("autosign", true));
@@ -2178,6 +2425,8 @@ public class ApkOverlayTools {
         overlayDialog.setOnDismissListener(d -> {
             activeOverlayForm = null;
             activeAdvRender = null;
+            overlayImageBase64 = null;
+            overlayVideoPath = null;
         });
         overlayDialog.show();
     }
@@ -2221,24 +2470,43 @@ public class ApkOverlayTools {
     }
 
     private void addFormatRow(LinearLayout row, EditText target) {
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        int margin = dp(3);
+        int btnHeight = dp(36);
+        int smallWidth = dp(44);
         String[][] buttons = {{"B", "<b>", "</b>"}, {"I", "<i>", "</i>"}, {"U", "<u>", "</u>"}};
         for (String[] spec : buttons) {
             MaterialButton btn = new MaterialButton(context);
             btn.setText(spec[0]);
+            btn.setSingleLine(true);
+            btn.setMaxLines(1);
+            btn.setMinWidth(0);
+            btn.setMinimumWidth(0);
+            btn.setMinHeight(0);
+            btn.setMinimumHeight(0);
+            btn.setPadding(0, 0, 0, 0);
             btn.setFocusable(false);
             btn.setFocusableInTouchMode(false);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-            int margin = dp(4);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(smallWidth, btnHeight);
             params.setMargins(margin, 0, margin, 0);
             btn.setOnClickListener(v -> wrapSelection(target, spec[1], spec[2]));
             row.addView(btn, params);
         }
         MaterialButton colorBtn = new MaterialButton(context);
         colorBtn.setText(R.string.color);
+        colorBtn.setSingleLine(true);
+        colorBtn.setMaxLines(1);
+        colorBtn.setMinWidth(0);
+        colorBtn.setMinimumWidth(0);
+        colorBtn.setMinHeight(0);
+        colorBtn.setMinimumHeight(0);
+        colorBtn.setPadding(dp(8), 0, dp(8), 0);
         colorBtn.setFocusable(false);
         colorBtn.setFocusableInTouchMode(false);
+        LinearLayout.LayoutParams colorParams = new LinearLayout.LayoutParams(0, btnHeight, 1f);
+        colorParams.setMargins(margin, 0, margin, 0);
         colorBtn.setOnClickListener(v -> showColorWheelDialog(target));
-        row.addView(colorBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.4f));
+        row.addView(colorBtn, colorParams);
     }
 
     private static void wrapSelection(EditText target, String open, String close) {
@@ -2455,7 +2723,7 @@ public class ApkOverlayTools {
         Runnable doAdd = () -> {
             ProgressManager pm = new ProgressManager(context, true).show();
             APKLogger logger = pm.getLogger();
-            new Thread(() -> {
+            AppExecutors.io().execute(() -> {
                 try {
                     File result = OverlayInjectorUtil.addOverlayToActivities(context, file, selectedActivities, toast, dialog, logger);
                     if (sign) wrapper[0].signApk(result);
@@ -2465,7 +2733,7 @@ public class ApkOverlayTools {
                     pm.dismiss();
                     new ErrorUtil(context).showError(e);
                 }
-            }).start();
+            });
         };
         if (sign) SignWrapper.requireAuth(context, sw -> {
             wrapper[0] = sw;
@@ -2506,7 +2774,7 @@ public class ApkOverlayTools {
         Runnable doRemove = () -> {
             ProgressManager pm = new ProgressManager(context, true).show();
             APKLogger logger = pm.getLogger();
-            new Thread(() -> {
+            AppExecutors.io().execute(() -> {
                 try {
                     File result = ToastInjectorUtil.removeAllToasts(context, file, logger);
                     if (sign) wrapper[0].signApk(result);
@@ -2516,7 +2784,7 @@ public class ApkOverlayTools {
                     pm.dismiss();
                     new ErrorUtil(context).showError(e);
                 }
-            }).start();
+            });
         };
         if (sign) SignWrapper.requireAuth(context, sw -> {
             wrapper[0] = sw;

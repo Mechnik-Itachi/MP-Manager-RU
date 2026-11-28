@@ -432,9 +432,12 @@ public final class ThemePackEditorColors {
     public static int applyToScheme(Context context, EditorColorScheme scheme) {
         if (scheme == null || context == null) return 0;
         int applied = 0;
+        boolean surfaceOverridden = false;
         try {
-            for (Map.Entry<Integer, Integer> e : schemeColorOverrides(
-                    activePackColors(context)).entrySet()) {
+            Map<Integer, Integer> colorOverrides = schemeColorOverrides(activePackColors(context));
+            surfaceOverridden = colorOverrides.containsKey(EditorColorScheme.WHOLE_BACKGROUND)
+                    || colorOverrides.containsKey(EditorColorScheme.TEXT_NORMAL);
+            for (Map.Entry<Integer, Integer> e : colorOverrides.entrySet()) {
                 scheme.setColor(e.getKey(), e.getValue());
                 applied++;
             }
@@ -443,9 +446,58 @@ public final class ThemePackEditorColors {
                 scheme.setColor(e.getKey(), e.getValue());
                 applied++;
             }
+            applyIndentGuideColors(scheme, surfaceOverridden);
         } catch (Exception ignored) {
         }
         return applied;
+    }
+
+    /**
+     * Ensures {@link EditorColorScheme#BLOCK_LINE} and {@link EditorColorScheme#BLOCK_LINE_CURRENT}
+     * remain visible and cohesive against the active scheme background. Built-in Sora schemes that
+     * default active block lines to {@code 0} get derived shades; custom pack surfaces always
+     * recompute matching guides when {@code forceFromSurface} is {@code true}.
+     */
+    public static void applyIndentGuideColors(EditorColorScheme scheme, boolean forceFromSurface) {
+        if (scheme == null) return;
+        int bg = scheme.getColor(EditorColorScheme.WHOLE_BACKGROUND);
+        int fg = scheme.getColor(EditorColorScheme.TEXT_NORMAL);
+        if (bg == 0) bg = 0xFF000000;
+        if (fg == 0) fg = isColorDark(bg) ? 0xFFE0E0E0 : 0xFF000000;
+
+        if (forceFromSurface || scheme.getColor(EditorColorScheme.BLOCK_LINE) == 0) {
+            scheme.setColor(EditorColorScheme.BLOCK_LINE, deriveIndentGuideColor(bg, fg, false));
+        }
+        if (forceFromSurface || scheme.getColor(EditorColorScheme.BLOCK_LINE_CURRENT) == 0) {
+            scheme.setColor(EditorColorScheme.BLOCK_LINE_CURRENT, deriveIndentGuideColor(bg, fg, true));
+        }
+    }
+
+    /**
+     * Pure color computation blending {@code foregroundArgb} over {@code backgroundArgb} so vertical
+     * indent guides stay readable without competing with syntax tokens.
+     */
+    public static int deriveIndentGuideColor(int backgroundArgb, int foregroundArgb, boolean active) {
+        boolean darkSurface = isColorDark(backgroundArgb);
+        float ratio = darkSurface ? (active ? 0.72f : 0.40f) : (active ? 0.58f : 0.30f);
+        int r = Math.round(((backgroundArgb >> 16) & 0xFF) * (1f - ratio)
+                + ((foregroundArgb >> 16) & 0xFF) * ratio);
+        int g = Math.round(((backgroundArgb >> 8) & 0xFF) * (1f - ratio)
+                + ((foregroundArgb >> 8) & 0xFF) * ratio);
+        int b = Math.round((backgroundArgb & 0xFF) * (1f - ratio)
+                + (foregroundArgb & 0xFF) * ratio);
+        return 0xFF000000 | (clampByte(r) << 16) | (clampByte(g) << 8) | clampByte(b);
+    }
+
+    private static int clampByte(int v) {
+        return Math.max(0, Math.min(255, v));
+    }
+
+    private static boolean isColorDark(int argb) {
+        int r = (argb >> 16) & 0xFF;
+        int g = (argb >> 8) & 0xFF;
+        int b = argb & 0xFF;
+        return (0.299 * r + 0.587 * g + 0.114 * b) < 128.0;
     }
 
     /** True when the active pack ships any syntax category at all. */
@@ -493,6 +545,76 @@ public final class ThemePackEditorColors {
             return source;
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    /**
+     * Builds a per-editor {@link IThemeSource} combining the active base theme,
+     * optional pack syntax overrides, and optional custom-syntax scope colors.
+     * Returns null when neither pack syntax nor custom scope colors apply.
+     */
+    public static IThemeSource mergedThemeSource(
+            Context context, Map<String, String> customSyntaxColors) {
+        if (customSyntaxColors == null || customSyntaxColors.isEmpty()) {
+            return mergedThemeSource(context);
+        }
+        if (context == null) return null;
+        try {
+            String baseName = baseThemeAssetName(context);
+            String baseJson = readAssetTheme(context, baseName);
+            if (baseJson == null) return null;
+            String merged = hasEditorSyntax(context)
+                    ? mergeThemeJson(baseJson, ThemeRegistry.editorSyntax(context))
+                    : baseJson;
+            merged = appendScopeColorRules(merged, customSyntaxColors);
+            return IThemeSource.fromString(IThemeSource.ContentType.JSON, merged);
+        } catch (Exception e) {
+            return mergedThemeSource(context);
+        }
+    }
+
+    /**
+     * Appends exact scope-to-foreground rules at the end of a base theme JSON's
+     * {@code tokenColors} or legacy {@code settings} array so custom syntax
+     * palettes override generic rules cleanly.
+     */
+    public static String appendScopeColorRules(String baseJson, Map<String, String> scopeColors) {
+        if (baseJson == null || scopeColors == null || scopeColors.isEmpty()) return baseJson;
+        try {
+            String cleaned = baseJson.startsWith("\uFEFF") ? baseJson.substring(1) : baseJson;
+            JsonElement root = JsonParser.parseString(cleaned);
+            if (root == null || !root.isJsonObject()) return baseJson;
+            JsonObject obj = root.getAsJsonObject();
+
+            String arrayKey = "tokenColors";
+            JsonArray target = null;
+            JsonElement tokenColors = obj.get("tokenColors");
+            if (tokenColors != null && tokenColors.isJsonArray()) {
+                target = tokenColors.getAsJsonArray();
+            } else {
+                JsonElement settings = obj.get("settings");
+                if (settings != null && settings.isJsonArray()) {
+                    arrayKey = "settings";
+                    target = settings.getAsJsonArray();
+                }
+            }
+            if (target == null) target = new JsonArray();
+
+            for (Map.Entry<String, String> entry : scopeColors.entrySet()) {
+                String scope = entry.getKey();
+                String hex = entry.getValue();
+                if (scope == null || scope.isEmpty() || hex == null || hex.isEmpty()) continue;
+                JsonObject rule = new JsonObject();
+                rule.addProperty("scope", scope);
+                JsonObject ruleSettings = new JsonObject();
+                ruleSettings.addProperty("foreground", hex);
+                rule.add("settings", ruleSettings);
+                target.add(rule);
+            }
+            obj.add(arrayKey, target);
+            return obj.toString();
+        } catch (Exception e) {
+            return baseJson;
         }
     }
 

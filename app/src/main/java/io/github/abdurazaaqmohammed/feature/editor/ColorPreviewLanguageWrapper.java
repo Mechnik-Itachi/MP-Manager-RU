@@ -24,11 +24,30 @@ public class ColorPreviewLanguageWrapper extends EmptyLanguage {
     private final Language delegate;
     private final CodeEditor editor;
     private final ColorPreviewAnalyzeManager analyzeManager;
+    private final Formatter customFormatter;
 
     public ColorPreviewLanguageWrapper(@NonNull Language delegate, @NonNull CodeEditor editor) {
+        this(delegate, editor, null);
+    }
+
+    public ColorPreviewLanguageWrapper(
+            @NonNull Language delegate,
+            @NonNull CodeEditor editor,
+            Formatter customFormatter) {
         this.delegate = delegate;
         this.editor = editor;
         this.analyzeManager = new ColorPreviewAnalyzeManager(delegate.getAnalyzeManager(), editor);
+        this.customFormatter = customFormatter;
+    }
+
+    /** Returns the wrapped language so editor settings (like tab size) can reach TextMateLanguage. */
+    public Language getDelegate() {
+        return delegate;
+    }
+
+    public ColorPreviewLanguageWrapper setHighlightSmaliMethods(boolean highlightSmaliMethods) {
+        analyzeManager.setHighlightSmaliMethods(highlightSmaliMethods);
+        return this;
     }
 
     @NonNull
@@ -62,7 +81,7 @@ public class ColorPreviewLanguageWrapper extends EmptyLanguage {
     @NonNull
     @Override
     public Formatter getFormatter() {
-        return delegate.getFormatter();
+        return customFormatter != null ? customFormatter : delegate.getFormatter();
     }
 
     @Override

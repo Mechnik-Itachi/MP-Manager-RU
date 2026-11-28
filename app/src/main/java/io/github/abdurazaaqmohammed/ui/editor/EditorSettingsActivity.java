@@ -9,7 +9,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.SearchView;
@@ -163,33 +162,18 @@ public class EditorSettingsActivity extends BaseActivity {
 
         private void importSyntaxFile(Uri uri) {
             try {
-                Context ctx = requireContext();
-                String fileName = "syntax_" + System.currentTimeMillis() + ".tmLanguage.json";
-                android.database.Cursor c = ctx.getContentResolver().query(uri, null, null, null, null);
-                if (c != null) {
-                    int nameIdx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
-                    if (nameIdx >= 0 && c.moveToFirst()) {
-                        String name = c.getString(nameIdx);
-                        if (name != null && !name.isEmpty()) fileName = name;
-                    }
-                    c.close();
-                }
-
-                java.io.File dir = new java.io.File(ctx.getFilesDir(), "syntaxes");
-                if (!dir.exists()) dir.mkdirs();
-                java.io.File dest = new java.io.File(dir, fileName);
-
-                try (java.io.InputStream in = ctx.getContentResolver().openInputStream(uri);
-                     java.io.FileOutputStream out = new java.io.FileOutputStream(dest)) {
-                    byte[] buf = new byte[8192];
-                    int len;
-                    while ((len = in.read(buf)) > 0) {
-                        out.write(buf, 0, len);
-                    }
-                }
-                Toast.makeText(ctx, "Imported syntax: " + fileName, Toast.LENGTH_SHORT).show();
+                io.github.abdurazaaqmohammed.feature.editor.CustomSyntaxManager.CustomSyntaxInfo info =
+                        io.github.abdurazaaqmohammed.feature.editor.CustomSyntaxManager.importSyntax(requireContext(), uri);
+                showSnack("Imported syntax: " + info.displayName);
             } catch (Exception e) {
-                Toast.makeText(requireContext(), "Failed to import syntax: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                showSnack("Failed to import syntax: " + e.getMessage());
+            }
+        }
+
+        private void showSnack(CharSequence msg) {
+            Activity a = getActivity();
+            if (a != null && !a.isFinishing() && !a.isDestroyed()) {
+                io.github.codehasan.colorpicker.extensions.Extensions.showMessage(a, msg);
             }
         }
 
@@ -199,7 +183,7 @@ public class EditorSettingsActivity extends BaseActivity {
                 apiKeyPref.setOnPreferenceChangeListener((preference, newValue) -> {
                     String apiKey = ((String) newValue).trim();
                     if (apiKey.isEmpty()) {
-                        Toast.makeText(requireContext(), "Input key", Toast.LENGTH_SHORT).show();
+                        showSnack("Input key");
                         return false;
                     }
                     preference.setSummary(formatApiKeySummary(apiKey));
@@ -238,16 +222,16 @@ public class EditorSettingsActivity extends BaseActivity {
             Context ctx = getContext();
             if (ctx == null) return;
             if (modder.hub.dexeditor.fragment.SettingsFragment.getChatGptApiKey(ctx).trim().isEmpty()) {
-                if (manual) Toast.makeText(ctx, "Set API key first", Toast.LENGTH_SHORT).show();
+                if (manual) showSnack("Set API key first");
                 return;
             }
-            if (manual) Toast.makeText(ctx, "Fetching models", Toast.LENGTH_SHORT).show();
+            if (manual) showSnack("Fetching models");
             modder.hub.dexeditor.fragment.SettingsFragment.fetchGeminiModels(ctx, models -> {
                 Activity a = getActivity();
                 if (a == null || !isAdded()) return;
-                a.runOnUiThread(() -> {
+                io.github.abdurazaaqmohammed.util.misc.AppExecutors.runOnUiIfAlive(a, () -> {
                     if (models.isEmpty()) {
-                        if (manual) Toast.makeText(a, "No Gemini models found", Toast.LENGTH_SHORT).show();
+                        if (manual) showSnack("No Gemini models found");
                         return;
                     }
                     ListPreference modelPref = findPreference("gemini_model");
@@ -261,7 +245,7 @@ public class EditorSettingsActivity extends BaseActivity {
                             modelPref.setValue(models.contains(fallback) ? fallback : models.get(0));
                         }
                     }
-                    if (manual) Toast.makeText(a, models.size() + " models loaded", Toast.LENGTH_SHORT).show();
+                    if (manual) showSnack(models.size() + " models loaded");
                 });
             });
         }
@@ -276,7 +260,7 @@ public class EditorSettingsActivity extends BaseActivity {
                 startActivity(new Intent(Intent.ACTION_VIEW,
                         Uri.parse("https://aistudio.google.com/app/u/0/apikey")));
             } catch (Exception e) {
-                Toast.makeText(requireContext(), "No browser found", Toast.LENGTH_SHORT).show();
+                showSnack("No browser found");
             }
         }
 

@@ -9,7 +9,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="24dp">
 
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
@@ -48,15 +51,24 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/overlayProfileSave"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
                 android:text="@string/save" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/overlayProfileDelete"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
                 android:text="@string/delete" />
         </LinearLayout>
 
@@ -455,6 +467,27 @@
             android:orientation="vertical"
             android:visibility="gone">
 
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="@string/show_mode">
+
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    android:id="@+id/overlayDlgShowModeTv"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/overlayDlgMovable"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/movable_dialog" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/overlayStyleToggle"
                 android:layout_width="match_parent"
@@ -525,7 +558,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
                     android:layout_marginTop="12dp"
-                    android:background="#22000000" />
+                    android:alpha="0.6"
+                    android:background="?attr/colorOutlineVariant" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -588,7 +622,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
                     android:layout_marginTop="12dp"
-                    android:background="#22000000" />
+                    android:alpha="0.6"
+                    android:background="?attr/colorOutlineVariant" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -654,7 +689,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
                     android:layout_marginTop="12dp"
-                    android:background="#22000000" />
+                    android:alpha="0.6"
+                    android:background="?attr/colorOutlineVariant" />
 
                 <TextView
                     android:layout_width="match_parent"
@@ -708,6 +744,31 @@
             android:visibility="gone">
 
             <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/overlayDlgCountdown"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/countdown_auto_dismiss" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/overlayDlgCountdownBox"
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:hint="@string/countdown_seconds"
+                android:visibility="gone">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/overlayDlgCountdownSec"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="3"
+                    tools:ignore="HardcodedText" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/overlayDlgCancelable"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -715,31 +776,65 @@
                 android:checked="true"
                 android:text="@string/cancelable" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/overlayDlgDontShow"
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/add_don_t_show_again_option" />
+                android:layout_marginTop="4dp"
+                android:hint="@string/dialog_media">
+
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    android:id="@+id/overlayDlgMediaTv"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none" />
+            </com.google.android.material.textfield.TextInputLayout>
 
             <LinearLayout
+                android:id="@+id/overlayDlgMediaBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="4dp">
+                android:orientation="vertical"
+                android:layout_marginTop="4dp"
+                android:visibility="gone">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/overlayDlgImageBtn"
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/dialog_image" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-                <ImageView
-                    android:id="@+id/overlayDlgImagePreview"
-                    android:layout_width="64dp"
-                    android:layout_height="64dp"
-                    android:layout_marginStart="8dp"
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/overlayDlgPickMediaBtn"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/dialog_image" />
+
+                    <ImageView
+                        android:id="@+id/overlayDlgImagePreview"
+                        android:layout_width="64dp"
+                        android:layout_height="64dp"
+                        android:layout_marginStart="8dp"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/overlayDlgVideoSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/overlayDlgVideoWarn"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/video_size_warning"
+                    android:textColor="?attr/colorError"
+                    android:textSize="12sp"
                     android:visibility="gone" />
             </LinearLayout>
 
@@ -781,6 +876,15 @@
                     android:visibility="gone" />
 
                 <TextView
+                    android:id="@+id/overlayDlgPreviewVideoTv"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingBottom="6dp"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
                     android:id="@+id/overlayDlgPreviewTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -793,6 +897,31 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:textSize="15sp" />
+
+                <LinearLayout
+                    android:id="@+id/overlayDlgPreviewCountdownRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <ProgressBar
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:indeterminate="true" />
+
+                    <TextView
+                        android:id="@+id/overlayDlgPreviewCountdownText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="3"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        tools:ignore="HardcodedText" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 
@@ -815,7 +944,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="380dp"
                 android:layout_marginTop="4dp"
-                android:background="#20000000" />
+                android:background="?attr/colorSurfaceVariant" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -886,6 +1015,35 @@
                 android:orientation="vertical"
                 android:layout_marginTop="8dp" />
         </LinearLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:hint="@string/overlay_hook_method">
+
+            <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                android:id="@+id/overlayHookMethod"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="none" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/overlayProtectCode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/protect_calling_code" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:alpha="0.7"
+            android:text="@string/protect_calling_code_summary"
+            android:textSize="12sp" />
 
         <com.google.android.material.checkbox.MaterialCheckBox
             android:id="@+id/overlayAutosign"

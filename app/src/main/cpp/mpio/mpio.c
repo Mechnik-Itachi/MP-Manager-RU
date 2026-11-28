@@ -84,7 +84,10 @@ typedef struct {
 } ScanStats;
 
 static bool virtual_filesystem(const char *path) {
-    static const char *roots[] = {"/proc", "/sys", "/dev", "/acct", "/config", "/d", "/linkerconfig", "/data_mirror"};
+    static const char *roots[] = {
+        "/proc", "/sys", "/dev", "/acct", "/config", "/d", "/linkerconfig", "/data_mirror",
+        "/mnt/runtime", "/mnt/androidwritable", "/mnt/installer", "/mnt/pass_through", "/mnt/user"
+    };
     for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); i++) {
         size_t len = strlen(roots[i]);
         if (strncmp(path, roots[i], len) == 0 && (path[len] == '\0' || path[len] == '/')) return true;
@@ -611,6 +614,563 @@ static int do_delete(int count, char *paths[]) {
     return 0;
 }
 
+static int64_t stat_mtime_ms(const struct stat *st) {
+    int64_t ms = (int64_t)st->st_mtim.tv_sec * 1000LL
+               + (int64_t)(st->st_mtim.tv_nsec / 1000000LL);
+    return ms < 0 ? 0 : ms;
+}
+
+static DIR *open_target_dir(const char *raw_path, int *out_errno) {
+    char fast_path[4096];
+    DIR *dir = NULL;
+    if (resolve_fast_path(raw_path, fast_path, sizeof(fast_path)) == 0) {
+        dir = opendir(fast_path);
+        if (dir) return dir;
+        *out_errno = errno;
+        if (strcmp(fast_path, raw_path) == 0) return NULL;
+    } else {
+        *out_errno = errno;
+    }
+    dir = opendir(raw_path);
+    if (!dir) *out_errno = errno;
+    return dir;
+}
+
+static int lstat_target_path(const char *raw_path, char *chosen_path, size_t chosen_cap,
+                             struct stat *lst, int *out_errno) {
+    if (resolve_fast_path(raw_path, chosen_path, chosen_cap) == 0) {
+        if (lstat(chosen_path, lst) == 0) return 0;
+        *out_errno = errno;
+        if (strcmp(chosen_path, raw_path) == 0) return -1;
+    } else {
+        *out_errno = errno;
+    }
+    if (snprintf(chosen_path, chosen_cap, "%s", raw_path) >= (int)chosen_cap) {
+        *out_errno = ENAMETOOLONG;
+        return -1;
+    }
+    if (lstat(chosen_path, lst) == 0) return 0;
+    *out_errno = errno;
+    return -1;
+}
+
+static void write_nul_str(const char *s) {
+    size_t len = strlen(s);
+    if (len > 0) fwrite(s, 1, len, stdout);
+    putchar('\0');
+}
+
+static void emit_err_code(int err) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%d", err);
+    write_nul_str("ERR");
+    write_nul_str(buf);
+}
+
+static int emit_list_dir(const char *raw_path) {
+    if (!raw_path || raw_path[0] == '\0') {
+        emit_err_code(EINVAL);
+        return 1;
+    }
+    int open_err = 0;
+    DIR *dir = open_target_dir(raw_path, &open_err);
+    if (!dir) {
+        emit_err_code(open_err);
+        return 1;
+    }
+
+    int dfd = dirfd(dir);
+    size_t count = 0;
+    int read_err = 0;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(dir);
+        if (!entry) {
+            if (errno != 0) read_err = errno;
+            break;
+        }
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+
+        struct stat lst;
+        bool is_dir = false;
+        bool is_file = false;
+        bool is_link = false;
+        uint64_t size = 0;
+        int64_t mtime_ms = 0;
+        char mode_str[16] = "-";
+
+        if (dfd >= 0 && fstatat(dfd, entry->d_name, &lst, AT_SYMLINK_NOFOLLOW) == 0) {
+            is_link = S_ISLNK(lst.st_mode);
+            if (!is_link && !S_ISDIR(lst.st_mode) && !S_ISREG(lst.st_mode)) {
+                continue;
+            }
+            if (is_link) {
+                struct stat st;
+                if (fstatat(dfd, entry->d_name, &st, 0) == 0) {
+                    is_dir = S_ISDIR(st.st_mode);
+                    is_file = !is_dir;
+                    size = (!is_dir && S_ISREG(st.st_mode)) ? (uint64_t)st.st_size : 0ULL;
+                    mtime_ms = stat_mtime_ms(&st);
+                    snprintf(mode_str, sizeof(mode_str), "%o", (unsigned int)(st.st_mode & 07777));
+                } else {
+                    is_dir = false;
+                    is_file = true;
+                    size = 0ULL;
+                    mtime_ms = stat_mtime_ms(&lst);
+                    snprintf(mode_str, sizeof(mode_str), "%o", (unsigned int)(lst.st_mode & 07777));
+                }
+            } else {
+                is_dir = S_ISDIR(lst.st_mode);
+                is_file = S_ISREG(lst.st_mode);
+                size = is_dir ? 0ULL : (uint64_t)lst.st_size;
+                mtime_ms = stat_mtime_ms(&lst);
+                snprintf(mode_str, sizeof(mode_str), "%o", (unsigned int)(lst.st_mode & 07777));
+            }
+        } else {
+            if (entry->d_type == DT_DIR) {
+                is_dir = true;
+            } else if (entry->d_type == DT_LNK) {
+                is_link = true;
+                is_file = true;
+            } else if (entry->d_type == DT_REG || entry->d_type == DT_UNKNOWN) {
+                is_file = true;
+            } else {
+                continue;
+            }
+        }
+
+        printf("E %d %d %d %" PRIu64 " %" PRId64 " %s",
+               is_dir ? 1 : 0, is_file ? 1 : 0, is_link ? 1 : 0,
+               size, mtime_ms, mode_str);
+        putchar('\0');
+        write_nul_str(entry->d_name);
+        count++;
+    }
+    closedir(dir);
+
+    if (read_err != 0 && count == 0) {
+        emit_err_code(read_err);
+        return 1;
+    }
+    write_nul_str("OK");
+    return 0;
+}
+
+static int emit_stat_path(const char *raw_path) {
+    if (!raw_path || raw_path[0] == '\0') {
+        emit_err_code(EINVAL);
+        return 1;
+    }
+    char target[4096];
+    struct stat lst;
+    int err = 0;
+    if (lstat_target_path(raw_path, target, sizeof(target), &lst, &err) != 0) {
+        emit_err_code(err);
+        return 1;
+    }
+
+    bool is_link = S_ISLNK(lst.st_mode);
+    bool is_dir = false;
+    bool is_file = false;
+    uint64_t size = 0;
+    int64_t mtime_ms = 0;
+    char mode_str[16];
+
+    if (is_link) {
+        struct stat st;
+        if (stat(target, &st) == 0) {
+            is_dir = S_ISDIR(st.st_mode);
+            is_file = !is_dir && (S_ISREG(st.st_mode) || !S_ISFIFO(st.st_mode));
+            size = (!is_dir && S_ISREG(st.st_mode)) ? (uint64_t)st.st_size : 0ULL;
+            mtime_ms = stat_mtime_ms(&st);
+            snprintf(mode_str, sizeof(mode_str), "%o", (unsigned int)(st.st_mode & 07777));
+        } else {
+            is_dir = false;
+            is_file = true;
+            size = 0ULL;
+            mtime_ms = stat_mtime_ms(&lst);
+            snprintf(mode_str, sizeof(mode_str), "%o", (unsigned int)(lst.st_mode & 07777));
+        }
+    } else {
+        is_dir = S_ISDIR(lst.st_mode);
+        is_file = S_ISREG(lst.st_mode);
+        size = is_dir ? 0ULL : (is_file ? (uint64_t)lst.st_size : 0ULL);
+        mtime_ms = stat_mtime_ms(&lst);
+        snprintf(mode_str, sizeof(mode_str), "%o", (unsigned int)(lst.st_mode & 07777));
+    }
+
+    printf("S 1 %d %d %d %" PRIu64 " %" PRId64 " %s",
+           is_dir ? 1 : 0, is_file ? 1 : 0, is_link ? 1 : 0,
+           size, mtime_ms, mode_str);
+    putchar('\0');
+    return 0;
+}
+
+static bool virtual_root_name(const char *name) {
+    static const char *names[] = {
+        "proc", "sys", "dev", "acct", "config", "d", "linkerconfig", "data_mirror"
+    };
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        if (strcmp(name, names[i]) == 0) return true;
+    }
+    return false;
+}
+
+static int normalize_clean_path(const char *in, char *out, size_t cap) {
+    if (!in || in[0] == '\0') {
+        errno = EINVAL;
+        return -1;
+    }
+    size_t len = strlen(in);
+    while (len > 1 && in[len - 1] == '/') len--;
+    if (len >= cap) {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    memcpy(out, in, len);
+    out[len] = '\0';
+    return 0;
+}
+
+static bool scan_deadline_reached(uint64_t deadline_ms, uint64_t *ticks, bool *timed_out) {
+    if (*timed_out) return true;
+    if (deadline_ms > 0 && (((++(*ticks)) & 255ULL) == 0ULL)) {
+        if (current_time_ms() >= deadline_ms) {
+            *timed_out = true;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Takes ownership of dfd and closes it before returning.
+static void scan_fd_recursive(int dfd, bool is_fs_root, int depth, ScanStats *stats,
+                              uint64_t deadline_ms, uint64_t *ticks, bool *timed_out) {
+    DIR *dir = fdopendir(dfd);
+    if (!dir) {
+        close(dfd);
+        stats->errors++;
+        return;
+    }
+    int cur_fd = dirfd(dir);
+    for (;;) {
+        if (g_cancelled || scan_deadline_reached(deadline_ms, ticks, timed_out)) break;
+        errno = 0;
+        struct dirent *entry = readdir(dir);
+        if (!entry) {
+            if (errno != 0) stats->errors++;
+            break;
+        }
+        const char *name = entry->d_name;
+        if (name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'))) {
+            continue;
+        }
+        if (name[0] == '.') stats->hidden++;
+
+        unsigned char dtype = entry->d_type;
+        if (is_fs_root && virtual_root_name(name)) {
+            if (dtype == DT_DIR) {
+                stats->dirs++;
+            } else if (dtype == DT_UNKNOWN) {
+                struct stat vst;
+                if (fstatat(cur_fd, name, &vst, AT_SYMLINK_NOFOLLOW) == 0 && S_ISDIR(vst.st_mode)) {
+                    stats->dirs++;
+                } else {
+                    stats->files++;
+                }
+            } else {
+                stats->files++;
+            }
+            continue;
+        }
+
+        if (dtype == DT_LNK || dtype == DT_FIFO || dtype == DT_CHR || dtype == DT_BLK || dtype == DT_SOCK) {
+            stats->files++;
+            continue;
+        }
+
+        if (dtype == DT_DIR) {
+            stats->dirs++;
+            if (depth >= 96) {
+                stats->errors++;
+                continue;
+            }
+            int subfd = openat(cur_fd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            if (subfd >= 0) {
+                scan_fd_recursive(subfd, false, depth + 1, stats, deadline_ms, ticks, timed_out);
+            } else {
+                stats->errors++;
+            }
+            continue;
+        }
+
+        struct stat st;
+        if (dtype == DT_REG) {
+            if (fstatat(cur_fd, name, &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(st.st_mode)) {
+                stats->files++;
+                stats->bytes += (uint64_t)st.st_size;
+            } else {
+                stats->errors++;
+            }
+            continue;
+        }
+
+        // DT_UNKNOWN fallback via fstatat relative to directory fd
+        if (fstatat(cur_fd, name, &st, AT_SYMLINK_NOFOLLOW) != 0) {
+            stats->errors++;
+        } else if (S_ISDIR(st.st_mode)) {
+            stats->dirs++;
+            if (depth >= 96) {
+                stats->errors++;
+            } else {
+                int subfd = openat(cur_fd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+                if (subfd >= 0) {
+                    scan_fd_recursive(subfd, false, depth + 1, stats, deadline_ms, ticks, timed_out);
+                } else {
+                    stats->errors++;
+                }
+            }
+        } else if (S_ISREG(st.st_mode)) {
+            stats->files++;
+            stats->bytes += (uint64_t)st.st_size;
+        } else {
+            stats->files++;
+        }
+    }
+    if (closedir(dir) != 0) stats->errors++;
+}
+
+static int measure_target_path(const char *raw_path, uint64_t timeout_ms,
+                               ScanStats *out_stats, bool *out_timed_out, int *out_errno) {
+    memset(out_stats, 0, sizeof(*out_stats));
+    *out_timed_out = false;
+    *out_errno = 0;
+
+    char clean_path[4096];
+    if (normalize_clean_path(raw_path, clean_path, sizeof(clean_path)) != 0) {
+        *out_errno = errno;
+        return -1;
+    }
+
+    char target[4096];
+    struct stat lst;
+    int err = 0;
+    if (lstat_target_path(clean_path, target, sizeof(target), &lst, &err) != 0) {
+        *out_errno = err;
+        return -1;
+    }
+
+    bool target_is_dir = S_ISDIR(lst.st_mode);
+    bool target_is_link = S_ISLNK(lst.st_mode);
+    if (target_is_link) {
+        struct stat st;
+        if (stat(target, &st) == 0 && S_ISDIR(st.st_mode)) {
+            target_is_dir = true;
+            char real_target[4096];
+            if (realpath(target, real_target) != NULL && virtual_filesystem(real_target)) {
+                out_stats->dirs = 1;
+                return 0;
+            }
+        }
+    }
+
+    if (target_is_dir) {
+        out_stats->dirs = 1;
+        if (virtual_filesystem(clean_path) || virtual_filesystem(target)) {
+            return 0;
+        }
+        int open_flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
+        if (!target_is_link) {
+            open_flags |= O_NOFOLLOW;
+        }
+        int root_fd = open(target, open_flags);
+        if (root_fd < 0) {
+            *out_errno = errno;
+            return -1;
+        }
+        bool is_fs_root = (strcmp(target, "/") == 0);
+        uint64_t deadline_ms = (timeout_ms > 0) ? (current_time_ms() + timeout_ms) : 0ULL;
+        uint64_t ticks = 0ULL;
+        scan_fd_recursive(root_fd, is_fs_root, 0, out_stats, deadline_ms, &ticks, out_timed_out);
+        return 0;
+    }
+
+    out_stats->files = 1;
+    if (S_ISREG(lst.st_mode)) {
+        out_stats->bytes = (uint64_t)lst.st_size;
+    }
+    return 0;
+}
+
+// Reads a single NUL-terminated token. Returns 1 on success, 0 on clean EOF, -1 if oversized.
+static int read_nul_token(char *buf, size_t cap) {
+    size_t len = 0;
+    for (;;) {
+        int ch = getchar();
+        if (ch == EOF) return 0;
+        if (ch == '\0') {
+            buf[len] = '\0';
+            return 1;
+        }
+        if (len + 1 < cap) {
+            buf[len++] = (char)ch;
+        } else {
+            // Drain the remainder of the oversized token so stream stays synchronized.
+            while ((ch = getchar()) != EOF && ch != '\0') {}
+            return ch == EOF ? 0 : -1;
+        }
+    }
+}
+
+static uint64_t parse_u64_default(const char *s, uint64_t def_val) {
+    if (!s || s[0] == '\0') return def_val;
+    char *end = NULL;
+    unsigned long long v = strtoull(s, &end, 10);
+    if (end == s || *end != '\0') return def_val;
+    return (uint64_t)v;
+}
+
+static int handle_serve_dirsize(char *path, size_t path_cap) {
+    char num_buf[64];
+    int r_t = read_nul_token(num_buf, sizeof(num_buf));
+    if (r_t == 0) return 0;
+    int r_p = read_nul_token(path, path_cap);
+    if (r_p == 0) return 0;
+    if (r_t < 0) {
+        emit_err_code(EINVAL);
+        fflush(stdout);
+        return 1;
+    }
+    if (r_p < 0) {
+        emit_err_code(ENAMETOOLONG);
+        fflush(stdout);
+        return 1;
+    }
+    uint64_t timeout_ms = parse_u64_default(num_buf, 3000ULL);
+    ScanStats st;
+    bool timed_out = false;
+    int err = 0;
+    if (measure_target_path(path, timeout_ms, &st, &timed_out, &err) != 0) {
+        emit_err_code(err);
+    } else {
+        printf("D %d %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64,
+               timed_out ? 1 : 0, st.bytes, st.files, st.dirs, st.hidden, st.errors);
+        putchar('\0');
+    }
+    fflush(stdout);
+    return 1;
+}
+
+static int handle_serve_batch_dirsize(char *path, size_t path_cap) {
+    char per_buf[64], total_buf[64], count_buf[64];
+    int r_per = read_nul_token(per_buf, sizeof(per_buf));
+    if (r_per == 0) return 0;
+    int r_tot = read_nul_token(total_buf, sizeof(total_buf));
+    if (r_tot == 0) return 0;
+    int r_cnt = read_nul_token(count_buf, sizeof(count_buf));
+    if (r_cnt == 0) return 0;
+
+    if (r_per < 0 || r_tot < 0 || r_cnt < 0) {
+        emit_err_code(EINVAL);
+        fflush(stdout);
+        return 1;
+    }
+    uint64_t per_ms = parse_u64_default(per_buf, 1200ULL);
+    uint64_t total_ms = parse_u64_default(total_buf, 4000ULL);
+    uint64_t count = parse_u64_default(count_buf, 0ULL);
+    if (count > 100000ULL) {
+        // Drain tokens would be huge; reject invalid batch size clearly.
+        emit_err_code(EINVAL);
+        fflush(stdout);
+        return 1;
+    }
+
+    uint64_t total_deadline = (total_ms > 0ULL) ? (current_time_ms() + total_ms) : 0ULL;
+    for (uint64_t i = 0ULL; i < count; i++) {
+        int r_p = read_nul_token(path, path_cap);
+        if (r_p == 0) return 0;
+        if (r_p < 0) {
+            printf("I %" PRIu64 " 0 0 0 0 0 1", i);
+            putchar('\0');
+            continue;
+        }
+        uint64_t effective_ms = per_ms;
+        if (total_deadline > 0ULL) {
+            uint64_t now = current_time_ms();
+            if (now >= total_deadline) {
+                printf("I %" PRIu64 " 1 0 0 0 0 0", i);
+                putchar('\0');
+                continue;
+            }
+            uint64_t rem = total_deadline - now;
+            if (effective_ms == 0ULL || rem < effective_ms) {
+                effective_ms = rem;
+            }
+        }
+        ScanStats st;
+        bool timed_out = false;
+        int err = 0;
+        if (measure_target_path(path, effective_ms, &st, &timed_out, &err) != 0) {
+            printf("I %" PRIu64 " 0 0 0 0 0 1", i);
+        } else {
+            printf("I %" PRIu64 " %d %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64,
+                   i, timed_out ? 1 : 0, st.bytes, st.files, st.dirs, st.hidden, st.errors);
+        }
+        putchar('\0');
+    }
+    write_nul_str("OK");
+    fflush(stdout);
+    return 1;
+}
+
+static int do_serve(void) {
+    static char out_buf[65536];
+    setvbuf(stdout, out_buf, _IOFBF, sizeof(out_buf));
+    printf("MPIO_SERVE 2\n");
+    fflush(stdout);
+
+    char op[16];
+    char path[4096];
+    for (;;) {
+        int r_op = read_nul_token(op, sizeof(op));
+        if (r_op == 0) break;
+        if (r_op < 0) {
+            emit_err_code(EINVAL);
+            fflush(stdout);
+            continue;
+        }
+        if (strcmp(op, "Q") == 0) {
+            write_nul_str("BYE");
+            fflush(stdout);
+            return 0;
+        }
+        if (strcmp(op, "L") == 0 || strcmp(op, "S") == 0) {
+            int r_path = read_nul_token(path, sizeof(path));
+            if (r_path == 0) break;
+            if (r_path < 0) {
+                emit_err_code(ENAMETOOLONG);
+            } else if (op[0] == 'L') {
+                emit_list_dir(path);
+            } else {
+                emit_stat_path(path);
+            }
+            fflush(stdout);
+            continue;
+        }
+        if (strcmp(op, "D") == 0) {
+            if (!handle_serve_dirsize(path, sizeof(path))) break;
+            continue;
+        }
+        if (strcmp(op, "B") == 0) {
+            if (!handle_serve_batch_dirsize(path, sizeof(path))) break;
+            continue;
+        }
+        emit_err_code(EINVAL);
+        fflush(stdout);
+    }
+    return 0;
+}
+
 // A NUL-delimited list avoids Android's per-argument limit for large selections
 // and preserves spaces, quotes and newlines without invoking a shell per file.
 static int from_path_list(const char *command, const char *list_path) {
@@ -647,8 +1207,11 @@ int main(int argc, char *argv[]) {
     signal(SIGXFSZ, SIG_IGN); // Surface EFBIG as a copy error instead of dying mid-file.
 
     if (argc < 2) {
-        fprintf(stderr, "MPIO v1.0 Native I/O Daemon for MP-Manager\n");
+        fprintf(stderr, "MPIO v1.1 Native I/O Daemon for MP-Manager\n");
         fprintf(stderr, "Usage:\n");
+        fprintf(stderr, "  %s serve\n", argv[0]);
+        fprintf(stderr, "  %s list <dir>\n", argv[0]);
+        fprintf(stderr, "  %s stat <path>\n", argv[0]);
         fprintf(stderr, "  %s scan <path1> [path2 ...]\n", argv[0]);
         fprintf(stderr, "  %s copy <src> <dst>\n", argv[0]);
         fprintf(stderr, "  %s delete <path1> [path2 ...]\n", argv[0]);
@@ -656,6 +1219,19 @@ int main(int argc, char *argv[]) {
     }
 
     const char *cmd = argv[1];
+    if (strcmp(cmd, "serve") == 0) {
+        return do_serve();
+    } else if (strcmp(cmd, "list") == 0) {
+        if (argc < 3) return 1;
+        int rc = emit_list_dir(argv[2]);
+        fflush(stdout);
+        return rc;
+    } else if (strcmp(cmd, "stat") == 0) {
+        if (argc < 3) return 1;
+        int rc = emit_stat_path(argv[2]);
+        fflush(stdout);
+        return rc;
+    }
     if (argc == 4 && strcmp(argv[2], "--list") == 0
             && (strcmp(cmd, "scan") == 0 || strcmp(cmd, "delete") == 0)) {
         return from_path_list(cmd, argv[3]);

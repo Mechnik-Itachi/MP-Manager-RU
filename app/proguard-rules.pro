@@ -217,3 +217,6 @@
 -keep class io.github.abdurazaaqmohammed.util.archive.Aapt2Jni { *; }
 # AAPT2 profiles are stored as JSON by Gson.
 -keep class io.github.abdurazaaqmohammed.feature.apk.Aapt2Profile { *; }
+-keep class io.github.abdurazaaqmohammed.ui.editor.IndentGuideCodeEditor { *; }
+-keep class io.github.abdurazaaqmohammed.ui.editor.IndentGuideCodeEditor$IndentGuideRenderer { *; }
+-keep class com.caverock.androidsvg.** { *; }
