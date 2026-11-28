@@ -304,19 +304,27 @@ public final class ThemeEditorDialog {
             int pad = dp(activity, 16);
             int padSmall = dp(activity, 8);
             ScrollView scroll = new ScrollView(activity);
+            LinearLayout container = new LinearLayout(activity);
+            container.setOrientation(LinearLayout.VERTICAL);
+
+            // Live preview: pinned above the scrolling content.
+            preview.setContentDescription(
+                    activity.getString(R.string.theme_editor_preview_description));
+            container.addView(preview, marginParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 150),
+                    dp(activity, 4), dp(activity, 4), dp(activity, 4), padSmall));
+
+            ScrollView scroll = new ScrollView(activity);
             scroll.setFillViewport(true);
+            container.addView(scroll, new LinearLayout.LayoutParams(
+                   ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
             LinearLayout root = new LinearLayout(activity);
             root.setOrientation(LinearLayout.VERTICAL);
             root.setPadding(dp(activity, 4), dp(activity, 4), dp(activity, 4), dp(activity, 4));
             scroll.addView(root, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT));
-
-            // Live preview (editable before Apply: follows every edit).
-            preview.setContentDescription(
-                    activity.getString(R.string.theme_editor_preview_description));
-            root.addView(preview, marginParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 240), 0, 0, 0, padSmall));
 
             // Name.
             nameField = new EditText(activity);
@@ -403,7 +411,7 @@ public final class ThemeEditorDialog {
 
             MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity)
                     .setTitle(R.string.theme_editor_title)
-                    .setView(scroll)
+                    .setView(container)
                     .setPositiveButton(R.string.theme_editor_save, null)
                     .setNegativeButton(android.R.string.cancel, (d, w) ->
                             LocalThemes.discard(draft))
