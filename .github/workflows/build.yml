@@ -1,5 +1,4 @@
-
-name: Build MP-Manager APK
+name: Build MP-Manager RU APK
 
 on:
   workflow_dispatch:
