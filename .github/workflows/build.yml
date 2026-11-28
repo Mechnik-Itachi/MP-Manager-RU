@@ -1,0 +1,96 @@
+name: Build MP-Manager RU APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Patch incompatible Material attribute
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          old = "android.R.attr.colorPrimaryContainer"
+          new = "com.google.android.material.R.attr.colorPrimary"
+          count = 0
+          for path in Path(".").rglob("*.java"):
+              source = path.read_text()
+              updated = source.replace(old, new)
+              if updated != source:
+                  path.write_text(updated)
+                  count += source.count(old)
+                  print(f"Patched: {path}")
+          print(f"Total replacements: {count}")
+          PY
+
+      - name: Run Unit Tests
+        run: ./gradlew test
+
+      - name: Upload Test Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Unit-Test-Report
+          path: '**/build/reports/tests/**'
+          if-no-files-found: ignore
+
+      - name: Decode Release Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p app
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > app/release.keystore
+          test -s app/release.keystore
+
+      - name: Build APK
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleFullRelease
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MP-Manager-APK
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mapfile -t apk_files < <(find app/build/outputs/apk -type f -name '*.apk' -print)
+          if (( ${#apk_files[@]} == 0 )); then
+            echo "No APK files were produced" >&2
+            exit 1
+          fi
+          gh release delete continuous -y --cleanup-tag || true
+          gh release create continuous "${apk_files[@]}" \
+            --title "MP-Manager (Continuous Build)" \
+            --notes "Continuous build of MP-Manager. All automated unit tests passed successfully."
+          if [[ "${{ github.ref }}" == refs/tags/stage-* ]]; then
+            STAGE_TAG="${{ github.ref_name }}"
+            gh release delete "$STAGE_TAG" -y --cleanup-tag || true
+            gh release create "$STAGE_TAG" "${apk_files[@]}" \
+              --title "MP-Manager $STAGE_TAG: Privacy Engine Build" \
+              --notes "Automated release build for $STAGE_TAG. Verified unit tests and packaging passed."
+          fi
