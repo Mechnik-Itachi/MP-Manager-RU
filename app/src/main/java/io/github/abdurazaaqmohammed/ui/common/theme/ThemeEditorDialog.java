@@ -287,10 +287,15 @@ public final class ThemeEditorDialog {
         EditText nameField;
         final java.util.List<ImageRow> imageRows = new java.util.ArrayList<>();
         TextView fileTypeSummary;
+        TextView scopeSummary;
+        TextView launcherSummary;
+        MaterialButton saveButton;
+        MaterialButton applyButton;
         final Map<String, View> chipSwatches = new java.util.LinkedHashMap<>();
         final Map<String, TextView> chipCaptions = new java.util.LinkedHashMap<>();
 
         EditorState(AppCompatActivity activity,
+        
                     SettingsController.ExternalSettingLauncher launcher,
                     Runnable onApplied, LocalThemes.Draft draft) {
             this.activity = activity;
@@ -303,7 +308,6 @@ public final class ThemeEditorDialog {
         void show() {
             int pad = dp(activity, 16);
             int padSmall = dp(activity, 8);
-            ScrollView scroll = new ScrollView(activity);
             LinearLayout container = new LinearLayout(activity);
             container.setOrientation(LinearLayout.VERTICAL);
 
@@ -317,7 +321,7 @@ public final class ThemeEditorDialog {
             ScrollView scroll = new ScrollView(activity);
             scroll.setFillViewport(true);
             container.addView(scroll, new LinearLayout.LayoutParams(
-                   ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
             LinearLayout root = new LinearLayout(activity);
             root.setOrientation(LinearLayout.VERTICAL);
@@ -364,21 +368,32 @@ public final class ThemeEditorDialog {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT, 0, 0, 0, padSmall));
 
-            // Colors: horizontally scrollable chip strip.
-            addSectionHeader(root, R.string.theme_editor_section_colors);
-            HorizontalScrollViewHost colorScroller = new HorizontalScrollViewHost(activity);
-            colorScroller.setHorizontalScrollBarEnabled(false);
-            LinearLayout colorRow = new LinearLayout(activity);
-            colorRow.setOrientation(LinearLayout.HORIZONTAL);
+            // Colors: one collapsible list.
+            TextView colorsHeader = new TextView(activity);
+            colorsHeader.setTextSize(14);
+            colorsHeader.setTypeface(null, Typeface.BOLD);
+            colorsHeader.setPadding(dp(activity, 12), dp(activity, 12),
+                    dp(activity, 12), dp(activity, 4));
+            String colorsTitle = activity.getString(R.string.theme_editor_section_colors);
+            colorsHeader.setText(colorsTitle + "  \u25BC");
+            root.addView(colorsHeader, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            LinearLayout colorList = new LinearLayout(activity);
+            colorList.setOrientation(LinearLayout.VERTICAL);
             for (String token : CHIP_TOKENS) {
-                colorRow.addView(colorChip(activity, token));
+                colorList.addView(colorChip(activity, token));
             }
-            colorScroller.addView(colorRow, new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-            root.addView(colorScroller, marginParams(
+            root.addView(colorList, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT, 0, 0, 0, padSmall));
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            colorsHeader.setOnClickListener(v -> {
+                boolean open = colorList.getVisibility() != View.VISIBLE;
+                colorList.setVisibility(open ? View.VISIBLE : View.GONE);
+                colorsHeader.setText(colorsTitle + (open ? "  \u25BC" : "  \u25B6"));
+            });
+
             TextView colorMore = new TextView(activity);
             colorMore.setText(R.string.theme_editor_colors_hint);
             colorMore.setTextSize(12);
@@ -397,11 +412,9 @@ public final class ThemeEditorDialog {
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT, 0, padSmall, 0, 0));
 
-            // Launcher icon choice (shared bundled choices).
-            addSectionHeader(root, R.string.theme_editor_section_launcher);
             root.addView(launcherRow(), marginParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT, 0, 0, 0, 0));
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 0, padSmall, 0, 0));
 
             TextView note = new TextView(activity);
             note.setText(R.string.theme_editor_apply_note);
@@ -409,30 +422,62 @@ public final class ThemeEditorDialog {
             note.setPadding(dp(activity, 4), dp(activity, 8), 0, 0);
             root.addView(note);
 
-            MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity)
+            LinearLayout bar = new LinearLayout(activity);
+            bar.setOrientation(LinearLayout.HORIZONTAL);
+            bar.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+            bar.setPadding(dp(activity, 8), padSmall, dp(activity, 8), 0);
+
+            MaterialButton cancelButton = new MaterialButton(activity, null,
+                    androidx.appcompat.R.attr.borderlessButtonStyle);
+            cancelButton.setText(android.R.string.cancel);
+
+            applyButton = new MaterialButton(activity);
+            applyButton.setText(R.string.theme_editor_apply);
+            applyButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    com.google.android.material.color.MaterialColors.getColor(activity,
+                            com.google.android.material.R.attr.colorSecondaryContainer, 0)));
+            applyButton.setTextColor(com.google.android.material.color.MaterialColors.getColor(
+                    activity, com.google.android.material.R.attr.colorOnSecondaryContainer, 0));
+
+            saveButton = new MaterialButton(activity);
+            saveButton.setText(R.string.theme_editor_save);
+
+            for (MaterialButton b : new MaterialButton[]{applyButton, saveButton}) {
+                b.setMaxLines(1);
+                b.setPadding(dp(activity, 16), b.getPaddingTop(),
+                        dp(activity, 16), b.getPaddingBottom());
+            }
+            bar.addView(cancelButton);
+            bar.addView(applyButton, marginParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, padSmall, 0, 0, 0));
+            bar.addView(saveButton, marginParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, padSmall, 0, 0, 0));
+            container.addView(bar, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            dialog = new MaterialAlertDialogBuilder(activity)
                     .setTitle(R.string.theme_editor_title)
                     .setView(container)
-                    .setPositiveButton(R.string.theme_editor_save, null)
-                    .setNegativeButton(android.R.string.cancel, (d, w) ->
-                            LocalThemes.discard(draft))
-                    .setNeutralButton(R.string.theme_editor_apply, null);
-            dialog = builder.create();
+                    .create();
             dialog.setOnCancelListener(d -> LocalThemes.discard(draft));
+            cancelButton.setOnClickListener(v -> {
+                LocalThemes.discard(draft);
+                dialog.dismiss();
+            });
+            applyButton.setOnClickListener(v -> save(true));
+            saveButton.setOnClickListener(v -> save(false));
             dialog.show();
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v ->
-                    save(false));
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v ->
-                    save(true));
         }
-
+        
         private void save(boolean apply) {
             if (nameField != null) draft.name = String.valueOf(nameField.getText());
             if (draft.name == null || draft.name.trim().isEmpty()) {
                 toast(activity, R.string.theme_editor_name_required);
                 return;
             }
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setEnabled(false);
+            saveButton.setEnabled(false);
+            applyButton.setEnabled(false);
             AppExecutors.io().execute(() -> {
                 String id = apply
                         ? LocalThemes.saveAndApply(activity, draft)
@@ -443,8 +488,8 @@ public final class ThemeEditorDialog {
                     if (activity.isFinishing() || activity.isDestroyed()) return;
                     if (id == null) {
                         toast(activity, R.string.theme_editor_error);
-                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
-                        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setEnabled(true);
+                        saveButton.setEnabled(true);
+                        applyButton.setEnabled(true);
                         return;
                     }
                     toast(activity, apply ? R.string.theme_editor_applied
@@ -465,12 +510,10 @@ public final class ThemeEditorDialog {
 
         /** One labeled chip: rounded swatch + short human-readable caption. */
         private View colorChip(AppCompatActivity activity, String token) {
-            LinearLayout chip = new LinearLayout(activity);
-            chip.setOrientation(LinearLayout.VERTICAL);
-            chip.setGravity(Gravity.CENTER_HORIZONTAL);
-            LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(
-                    dp(activity, 52), ViewGroup.LayoutParams.WRAP_CONTENT);
-            chipParams.rightMargin = dp(activity, 6);
+            LinearLayout row = new LinearLayout(activity);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(activity, 12), dp(activity, 6), dp(activity, 12), dp(activity, 6));
 
             View swatch = new View(activity);
             GradientDrawable bg = new GradientDrawable();
@@ -480,27 +523,35 @@ public final class ThemeEditorDialog {
             bg.setColor(value == null ? 0xFF757575 : value);
             bg.setStroke(dp(activity, 1), 0x66808080);
             swatch.setBackground(bg);
-            chip.addView(swatch, new LinearLayout.LayoutParams(
-                    dp(activity, 44), dp(activity, 44)));
+            row.addView(swatch, new LinearLayout.LayoutParams(
+                    dp(activity, 36), dp(activity, 36)));
 
+            LinearLayout text = new LinearLayout(activity);
+            text.setOrientation(LinearLayout.VERTICAL);
+            TextView name = new TextView(activity);
+            name.setTextSize(15);
+            name.setText(colorLabel(activity, token));
+            text.addView(name);
             TextView caption = new TextView(activity);
-            caption.setTextSize(10);
-            caption.setGravity(Gravity.CENTER_HORIZONTAL);
-            caption.setMaxLines(1);
-            caption.setText(colorLabel(activity, token));
-            chip.addView(caption, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            caption.setTextSize(12);
+            caption.setAlpha(0.7f);
+            caption.setText(value == null
+                    ? activity.getString(R.string.theme_editor_default) : hex(value));
+            text.addView(caption);
+            LinearLayout.LayoutParams textParams = marginParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, dp(activity, 12), 0, 0, 0);
+            textParams.weight = 1f;
+            row.addView(text, textParams);
 
-            chip.setContentDescription(activity.getString(
+            row.setContentDescription(activity.getString(
                     R.string.theme_editor_color_description,
                     colorLabel(activity, token),
                     value == null ? activity.getString(R.string.theme_editor_default)
                             : hex(value)));
-            chip.setOnClickListener(v -> showColorEditor(token, swatch, caption));
+            row.setOnClickListener(v -> showColorEditor(token, swatch, caption));
             chipSwatches.put(token, swatch);
             chipCaptions.put(token, caption);
-            return chip;
+            return row;
         }
 
         /** Updates a chip's swatch/caption after the wheel dialog applied. */
@@ -1039,15 +1090,38 @@ public final class ThemeEditorDialog {
             }
         }
 
+        private String scopeLabel() {
+            return activity.getString(
+                    ThemePackContracts.WALLPAPER_SCOPE_ALL.equals(draft.wallpaperScope)
+                            ? R.string.theme_editor_scope_all
+                            : ThemePackContracts.WALLPAPER_SCOPE_NONE.equals(draft.wallpaperScope)
+                            ? R.string.theme_editor_scope_none
+                            : R.string.theme_editor_scope_files);
+        }
+
+        private String launcherLabel() {
+            for (LauncherIcons.Choice c : LauncherIcons.choices()) {
+                if (c.id.equals(draft.launcherId)) return activity.getString(c.labelRes);
+            }
+            return activity.getString(R.string.theme_editor_launcher_none);
+        }
+
         /** Wallpaper scope: files | all | none. */
         private View wallpaperScopeRow() {
             LinearLayout row = new LinearLayout(activity);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout text = new LinearLayout(activity);
+            text.setOrientation(LinearLayout.VERTICAL);
             TextView label = new TextView(activity);
             label.setText(R.string.theme_editor_wallpaper_scope);
             label.setTextSize(16);
-            row.addView(label, new LinearLayout.LayoutParams(
+            text.addView(label);
+            scopeSummary = new TextView(activity);
+            scopeSummary.setTextSize(12);
+            scopeSummary.setText(scopeLabel());
+            text.addView(scopeSummary);
+            row.addView(text, new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             MaterialButton choose = outlinedButton(activity, R.string.theme_editor_choose);
             choose.setOnClickListener(v -> {
@@ -1065,6 +1139,7 @@ public final class ThemeEditorDialog {
                                     : which == 2
                                     ? ThemePackContracts.WALLPAPER_SCOPE_NONE
                                     : ThemePackContracts.WALLPAPER_SCOPE_FILES;
+                            scopeSummary.setText(scopeLabel());
                             d.dismiss();
                         })
                         .setNegativeButton(android.R.string.cancel, null)
@@ -1079,10 +1154,17 @@ public final class ThemeEditorDialog {
             LinearLayout row = new LinearLayout(activity);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout text = new LinearLayout(activity);
+            text.setOrientation(LinearLayout.VERTICAL);
             TextView label = new TextView(activity);
             label.setText(R.string.theme_editor_launcher);
             label.setTextSize(16);
-            row.addView(label, new LinearLayout.LayoutParams(
+            text.addView(label);
+            launcherSummary = new TextView(activity);
+            launcherSummary.setTextSize(12);
+            launcherSummary.setText(launcherLabel());
+            text.addView(launcherSummary);
+            row.addView(text, new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             MaterialButton choose = outlinedButton(activity, R.string.theme_editor_choose);
             choose.setOnClickListener(v -> showLauncherChooser());
@@ -1103,9 +1185,11 @@ public final class ThemeEditorDialog {
             new MaterialAlertDialogBuilder(activity)
                     .setTitle(R.string.theme_editor_launcher)
                     .setSingleChoiceItems(names, selected, (d, which) -> picked[0] = which)
-                    .setPositiveButton(android.R.string.ok, (d, w) ->
-                            draft.launcherId = picked[0] == 0 ? null
-                                    : choices[picked[0] - 1].id)
+                    .setPositiveButton(android.R.string.ok, (d, w) -> {
+                        draft.launcherId = picked[0] == 0 ? null
+                                : choices[picked[0] - 1].id;
+                        launcherSummary.setText(launcherLabel());
+                    })
                     .setNegativeButton(android.R.string.cancel, null)
                     .show();
         }
